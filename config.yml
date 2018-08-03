@@ -1,0 +1,8 @@
+---
+bosh:
+  cmd: bosh2
+  env: blite
+  cf-dep: cf
+  cfdot-dc: diego-cell/0
+cf:
+  cmd: cf
