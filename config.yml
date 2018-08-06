@@ -6,3 +6,7 @@ bosh:
   cfdot-dc: diego-cell/0
 cf:
   cmd: cf
+container-port-whitelist:
+ - 22
+ - 2222
+host-port-whitelist: []

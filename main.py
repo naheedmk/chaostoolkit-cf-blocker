@@ -20,24 +20,48 @@ def main(org, space, appname, cfg):
         if proc.returncode:
             sys.exit("Failed retrieving the GUID for the specified app. Make sure {} is in this space!".format(appname))
 
-    hosts = set()
+    hosts = {}
 
-    with Popen([cf, 'curl', '/v2/apps/{}/stats'.format(guid)], stdout=PIPE, stderr=DEVNULL) as proc:
+    with Popen('{} -e {} -d {} ssh {}'.format(bosh, cfg['bosh']['env'], cfg['bosh']['cf-dep'], cfg['bosh']['cfdot-dc']),
+               shell=True, stdin=PIPE, stdout=PIPE, stderr=DEVNULL, encoding=enc) as proc:
+        stdout, _ = proc.communicate(input='cfdot actual-lrp-groups | grep --color=never {}\nexit\n'.format(guid), timeout=30)
         if proc.returncode:
-            sys.exit("Failed retrieving the ip and port for {}.".format(appname))
+            sys.exit("Failed retrieving LRP data from {}".format(cfg['bosh']['cfdot-dc']))
 
-        for _, app in json.load(proc.stdout):
-            if app['stats']['name'] != appname:
+        stdout = stdout.splitlines()
+        for line in stdout:
+            try:
+                instance = json.loads(line)['instance']
+            except json.JSONDecodeError:
                 continue
 
-            host_ip = app['stats']['host']
-            host_port = app['stats']['port']
-            print('Found host {}:{}'.format(host_ip, host_port))
+            if instance['state'] != 'RUNNING':
+                continue
 
-            hosts.add(host_ip)
+            host_ip = instance['address']
+            cont_ip = instance['instance_address']
+            assert hosts.get(host_ip) is None
+            cont_ports = set()
 
-    diego_cells = set()
-    for host_ip in hosts:
+            for p in instance['ports']:
+                host_port = p['host_port']
+                cont_port = p['container_port']
+
+                if host_port in cfg['host-port-whitelist']:
+                    continue
+                if cont_port in cfg['container-port-whitelist']:
+                    continue
+
+                cont_ports.add(cont_port)
+                print('Found application at {}:{} with container port {}'.format(host_ip, host_port, cont_port))
+
+            hosts[host_ip] = (cont_ip, cont_ports)
+
+        if not hosts:
+            sys.exit("No hosts found!")
+
+    diego_cells = {}
+    for host_ip, (cont_ip, cont_ports) in hosts:
         cmd = "{} -e {} -d {} vms | grep {} | grep -Po '^diego-cell/[a-z0-9-]*'" \
             .format(bosh, cfg['bosh']['env'], cfg['bosh']['cf-dep'], host_ip)
 
@@ -48,40 +72,23 @@ def main(org, space, appname, cfg):
                 continue
             dc = proc.stdout.readline().rstrip('\r\n')
 
-        diego_cells.add(dc)
+        assert diego_cells.get(dc) is None
+        diego_cells[dc] = (host_ip, cont_ip, cont_ports)
 
-    for dc in diego_cells:
-        with Popen("{} -e {} -d {} ssh {} -c 'sudo cat /var/vcap/data/container-metadata/store.json'"
-                              .format(bosh, cfg['bosh']['env'], cfg['bosh']['cf-dep'], dc),
-                      shell=True, stdin=PIPE, stdout=PIPE, stderr=DEVNULL, encoding=enc) as proc:
+    for dc, (host_ip, cont_ip, cont_ports) in diego_cells:
+        print("Targeting {} at {} on {}:{}.".format(host_ip, dc, cont_ip, cont_ports))
+
+    for dc, (host_ip, cont_ip, cont_ports) in diego_cells:
+        with Popen('{} -e {} -d {} ssh {}'.format(bosh, cfg['bosh']['env'], cfg['bosh']['cf-dep'], dc),
+                   shell=True, stdout=DEVNULL, stderr=DEVNULL, encoding=enc) as proc:
+
+            for cont_port in cont_ports:
+                proc.stdin.write('iptables -I FORWARD 1 -d {} --dport {} -j DROP\n'.format(cont_ip, cont_port))
+            proc.stdin.write('exit\n')
+            proc.stdin.close()
 
             if proc.returncode:
-                sys.exit("Failed to retrieve container metadata from {}".format(dc))
-
-            store = json.loads(
-                proc.stdout
-                    .readlines()[-2]  # get the second from last line, it is the actual output
-                    .split(' | ')[1]  # remove the 'diego-cell/...: stdout | ' garbage
-            )
-
-        for _handle, app in store:
-            if app['appid'] != guid:
-                continue
-            app_ip = app['ip']
-
-            # TODO: does this work for multiple app instances? If so, how does it know which app to ssh into?
-            with Popen("{} ssh {} -c 'echo $PORT'".format(cf, appname)) as proc:
-                if proc.returncode:
-                    sys.exit("Failed to get port for app on {} with container ip {}.".format(dc, app_ip))
-
-                app_port = int(proc.stdout.read())
-
-            with Popen("{} -e {} -d {} ssh {} -c 'iptables -I FORWARD 1 -d {} --dport {} -j DROP'"
-                                  .format(bosh, cfg['bosh']['env'], cfg['bosh']['cf-dep'], dc, app_ip, app_port),
-                          shell=True, stdout=DEVNULL, stderr=DEVNULL) as proc:
-
-                if proc.returncode:
-                    sys.exit("Failed to block {}:{} on {}.".format(app_ip, app_port, dc))
+                sys.exit("Failed to block {}:{} on {}.".format(cont_ip, cont_port, dc))
 
 
 if __name__ == '__main__':
