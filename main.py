@@ -61,9 +61,9 @@ def main(org, space, appname, cfg):
             sys.exit("No hosts found!")
 
     diego_cells = {}
-    for host_ip, (cont_ip, cont_ports) in hosts:
-        cmd = "{} -e {} -d {} vms | grep {} | grep -Po '^diego-cell/[a-z0-9-]*'" \
-            .format(bosh, cfg['bosh']['env'], cfg['bosh']['cf-dep'], host_ip)
+    for host_ip, (cont_ip, cont_ports) in hosts.items():
+        cmd = "{} -e {} -d {} vms | grep -P '\s{}\s' | grep -Po '^diego-cell/[a-z0-9-]*'" \
+            .format(bosh, cfg['bosh']['env'], cfg['bosh']['cf-dep'], host_ip.replace('.', '\.'))
 
         with Popen(cmd, shell=True, stdout=PIPE, stderr=DEVNULL, encoding=enc) as proc:
             if proc.returncode:
@@ -75,15 +75,15 @@ def main(org, space, appname, cfg):
         assert diego_cells.get(dc) is None
         diego_cells[dc] = (host_ip, cont_ip, cont_ports)
 
-    for dc, (host_ip, cont_ip, cont_ports) in diego_cells:
+    for dc, (host_ip, cont_ip, cont_ports) in diego_cells.items():
         print("Targeting {} at {} on {}:{}.".format(host_ip, dc, cont_ip, cont_ports))
 
-    for dc, (host_ip, cont_ip, cont_ports) in diego_cells:
+    for dc, (host_ip, cont_ip, cont_ports) in diego_cells.items():
         with Popen('{} -e {} -d {} ssh {}'.format(bosh, cfg['bosh']['env'], cfg['bosh']['cf-dep'], dc),
-                   shell=True, stdout=DEVNULL, stderr=DEVNULL, encoding=enc) as proc:
+                   shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=enc) as proc:
 
             for cont_port in cont_ports:
-                proc.stdin.write('iptables -I FORWARD 1 -d {} --dport {} -j DROP\n'.format(cont_ip, cont_port))
+                proc.stdin.write('sudo iptables -I FORWARD 1 -d {} -p tcp --dport {} -j DROP\n'.format(cont_ip, cont_port))
             proc.stdin.write('exit\n')
             proc.stdin.close()
 
