@@ -5,8 +5,9 @@ from subprocess import call, Popen, PIPE, DEVNULL
 from collections import namedtuple
 
 DEFAULT_ENCODING = 'UTF-8'
-ContainerInfo = namedtuple('Host', ['cont_ip', 'cont_ports'])
-DiegoContainerInfo = namedtuple('DiegoCell', ['diego_ip', 'cont_ip', 'cont_ports'])
+
+# TODO: define class Host to solidify the type
+# {"diego_ip": {"c1_ip": {p1, p2}, "c2_ip": {p1}}
 
 
 def cf_target(org, space, cfg):
@@ -43,7 +44,6 @@ def get_container_hosts(guid, cfg):
 
             host_ip = instance['address']
             cont_ip = instance['instance_address']
-            assert hosts.get(host_ip) is None
             cont_ports = set()
 
             for p in instance['ports']:
@@ -58,7 +58,10 @@ def get_container_hosts(guid, cfg):
                 cont_ports.add(cont_port)
                 print('Found application at {}:{} with container port {}'.format(host_ip, host_port, cont_port))
 
-            hosts[host_ip] = ContainerInfo(cont_ip, cont_ports)
+            host = hosts.get(host_ip) or {}
+            assert host.get(cont_ip) is None
+            host[cont_ip] = cont_ports
+            hosts[host_ip] = host
 
     return hosts
 
@@ -77,25 +80,28 @@ def get_diego_vm_name(diego_ip, cfg):
     return diego_vm
 
 
-def block_app(diego_vm, dci, cfg):
+def block_app(diego_vm, host, cfg):
     with Popen('{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], diego_vm),
-               shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
+               shell=True, stdin=PIPE, encoding=DEFAULT_ENCODING) as proc:
 
-        for cont_port in dci.cont_ports:
-            proc.stdin.write(
-                'sudo iptables -I FORWARD 1 -d {} -p tcp --dport {} -j DROP\n'.format(dci.cont_ip, cont_port))
+        for cont_ip, cont_ports in host.items():
+            for cont_port in cont_ports:
+                proc.stdin.write(
+                    'sudo iptables -I FORWARD 1 -d {} -p tcp --dport {} -j DROP\n'.format(cont_ip, cont_port))
+
         proc.stdin.write('exit\n')
         proc.stdin.close()
 
         return proc.returncode
 
 
-def unblock_app(diego_vm, dci, cfg):
+def unblock_app(diego_vm, host, cfg):
     with Popen('{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], diego_vm),
-               shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
-        for cont_port in dci.cont_ports:
-            proc.stdin.write(
-                'sudo iptables -D FORWARD -d {} -p tcp --dport {} -j DROP\n'.format(dci.cont_ip, cont_port))
+               shell=True, stdin=PIPE, encoding=DEFAULT_ENCODING) as proc:
+        for cont_ip, cont_ports in host.items():
+            for cont_port in cont_ports:
+                proc.stdin.write(
+                    'sudo iptables -D FORWARD -d {} -p tcp --dport {} -j DROP\n'.format(cont_ip, cont_port))
         proc.stdin.write('exit\n')
         proc.stdin.close()
 
@@ -114,25 +120,26 @@ def main(org, space, appname, block, cfg):
         sys.exit("No hosts found!")
 
     diego_cells = {}
-    for host_ip, ci in hosts.items():
-        diego_vm = get_diego_vm_name(host_ip, cfg)
+    for diego_ip, host in hosts.items():
+        diego_vm = get_diego_vm_name(diego_ip, cfg)
 
         if diego_vm is None:
             continue
         assert diego_cells.get(diego_vm) is None
 
-        diego_cells[diego_vm] = DiegoContainerInfo(host_ip, ci.cont_ip, ci.cont_ports)
+        diego_cells[diego_vm] = (diego_ip, host)
 
-    for diego_vm, dci in diego_cells.items():
-        print("Targeting {} at {} on {}:{}.".format(dci.diego_ip, diego_vm, dci.cont_ip, dci.cont_ports))
+    for diego_vm, (diego_ip, host) in diego_cells.items():
+        for cont_ip, cont_ports in host.items():
+            print("Targeting {} at {} on {}:{}.".format(diego_ip, diego_vm, cont_ip, cont_ports))
 
-    for diego_vm, dci in diego_cells.items():
+    for diego_vm, (_, host) in diego_cells.items():
         if block:
-            if block_app(diego_vm, dci, cfg):
-                sys.exit("Failed to block {}:{} on {}.".format(dci.cont_ip, dci.cont_ports, diego_vm))
+            if block_app(diego_vm, host, cfg):
+                sys.exit("Failed to block one or more of {} on {}.".format(host, diego_vm))
         else:
-            if unblock_app(diego_vm, dci, cfg):
-                print("WARNING: Failed to unblock {}:{} on {}.".format(dci.cont_ip, dci.cont_ports, diego_vm))
+            if unblock_app(diego_vm, host, cfg):
+                print("WARNING: Failed to unblock one or more of {} on {}.".format(host, diego_vm))
 
     print("Done!")
 
@@ -150,6 +157,3 @@ if __name__ == '__main__':
     assert args[0] in ['block', 'unblock']
 
     main(args[1], args[2], args[3], args[0] == 'block', config)
-
-
-# 75479234-b154-42f2-bd04-0c6d1abc83da
