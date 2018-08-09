@@ -5,6 +5,7 @@ from subprocess import call, Popen, PIPE, DEVNULL
 
 DEFAULT_ENCODING = 'UTF-8'
 TARGETED_HOSTS = 'targeted.json'
+TIMES_TO_REMOVE = 6
 
 
 class DiegoHost:
@@ -89,8 +90,9 @@ class DiegoHost:
             for cont_ip, cont_ports in self.containers.items():
                 for cont_port in cont_ports:
                     print("Unblocking {} on {}:{}".format(self.vm, cont_ip, cont_ports))
-                    proc.stdin.write(
-                        'sudo iptables -D FORWARD -d {} -p tcp --dport {} -j DROP\n'.format(cont_ip, cont_port))
+                    for _ in range(TIMES_TO_REMOVE):
+                        proc.stdin.write('sudo iptables -D FORWARD -d {} -p tcp --dport {} -j DROP\n'\
+                                         .format(cont_ip, cont_port))
             proc.stdin.write('exit\n')
             proc.stdin.close()
 
