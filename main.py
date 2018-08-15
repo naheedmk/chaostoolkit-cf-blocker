@@ -105,15 +105,17 @@ class DiegoHost:
         if self.vm:
             return self.vm
 
-        cmd = "{} -e {} -d {} vms | grep -P '\s{}\s' | grep -Po '^diego-cell/[a-z0-9-]*'" \
+        cmd = "{} -e {} -d {} vms | grep -P '\s{}\s' | grep -Po '^diego.cell/[a-z0-9-]*'" \
             .format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.ip.replace('.', '\.'))
 
+        print('$ ' + cmd)
         with Popen(cmd, shell=True, stdout=PIPE, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
             if proc.returncode:
                 print("Failed retrieving VM information from BOSH for {}.".format(self.ip),
                       file=sys.stderr)
                 return None
             self.vm = proc.stdout.readline().rstrip('\r\n')
+            print(self.vm)
 
         return self.vm
 
@@ -124,16 +126,18 @@ class DiegoHost:
         :param cfg: Configuration information about the environment.
         :return: The returncode of the bosh ssh program.
         """
-        with Popen(
-                '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm),
-                shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
+        cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm)
+        print('$ ' + cmd)
+        with Popen(cmd, shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
 
             for cont_ip, cont_ports in self.containers.items():
                 for cont_port in cont_ports:
                     print("Targeting {} on {}:{}".format(self.vm, cont_ip, cont_ports))
-                    proc.stdin.write(
-                        'sudo iptables -I FORWARD 1 -d {} -p tcp --dport {} -j DROP\n'.format(cont_ip, cont_port))
+                    cmd = 'sudo iptables -I FORWARD 1 -d {} -p tcp --dport {} -j DROP\n'.format(cont_ip, cont_port)
+                    print('$> ' + cmd, end='')
+                    proc.stdin.write(cmd)
 
+            print('$> exit')
             proc.stdin.write('exit\n')
             proc.stdin.close()
 
@@ -147,15 +151,17 @@ class DiegoHost:
         :param cfg: Configuration information about the environment.
         :return: The returncode of the bosh ssh program.
         """
-        with Popen(
-                '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm),
-                shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
+        cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm)
+        print('$ ' + cmd)
+        with Popen(cmd, shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
             for cont_ip, cont_ports in self.containers.items():
                 for cont_port in cont_ports:
                     print("Unblocking {} on {}:{}".format(self.vm, cont_ip, cont_ports))
                     for _ in range(TIMES_TO_REMOVE):
-                        proc.stdin.write('sudo iptables -D FORWARD -d {} -p tcp --dport {} -j DROP\n'\
-                                         .format(cont_ip, cont_port))
+                        cmd = 'sudo iptables -D FORWARD -d {} -p tcp --dport {} -j DROP\n'.format(cont_ip, cont_port)
+                        print('$> ' + cmd, end='')
+                        proc.stdin.write(cmd)
+            print("$> exit")
             proc.stdin.write('exit\n')
             proc.stdin.close()
 
@@ -312,33 +318,33 @@ class HostedApp:
         except FileNotFoundError:
             j = {}
 
-        with open(filename, 'w') as file:
-            if self.id() in j:
-                japp = j[self.id()]
-                assert self._validate_japp(japp)
+        if self.id() in j:
+            japp = j[self.id()]
+            assert self._validate_japp(japp)
+        else:
+            japp = {
+                'appname': self.appname,
+                'org': self.org,
+                'space': self.space,
+                'diego_hosts': {}
+            }
+
+        for dc in self.diego_hosts.values():
+            if dc.ip in japp['diego_hosts']:
+                jdc = japp['diego_hosts'][dc.ip]
+                assert jdc['vm'] == dc.vm
+                assert jdc['ip'] == dc.ip
             else:
-                japp = {
-                    'appname': self.appname,
-                    'org': self.org,
-                    'space': self.space,
-                    'diego_hosts': {}
-                }
+                jdc = {'ip': dc.ip, 'vm': dc.vm, 'containers': {}}
 
-            for dc in self.diego_hosts.values():
-                if dc.ip in japp['diego_hosts']:
-                    jdc = japp['diego_hosts'][dc.ip]
-                    assert jdc['vm'] == dc.vm
-                    assert jdc['ip'] == dc.ip
-                else:
-                    jdc = {'ip': dc.ip, 'vm': dc.vm, 'containers': {}}
+            for cont_ip, cont_ports in dc.containers.items():
+                jports = set(jdc.get(cont_ip, []))
+                jdc['containers'][cont_ip] = list(jports | cont_ports)
 
-                for cont_ip, cont_ports in dc.containers.items():
-                    jports = set(jdc.get(cont_ip, []))
-                    jdc['containers'][cont_ip] = list(jports | cont_ports)
+            japp['diego_hosts'][dc.ip] = jdc
+        j[self.id()] = japp
 
-                japp['diego_hosts'][dc.ip] = jdc
-            j[self.id()] = japp
-
+        with open(filename, 'w') as file:
             json.dump(j, file, indent=2, sort_keys=True)
 
     def load_hosts(self, filename, remove=True):
@@ -407,14 +413,16 @@ class HostedApp:
         :param cfg: Configuration information about the environment.
         :return: The application GUID.
         """
-        with Popen([cfg['cf']['cmd'], 'app', self.appname, '--guid'], stdout=PIPE, stderr=DEVNULL,
-                   encoding=DEFAULT_ENCODING) as proc:
+        cmd = '{} app {} --guid'.format(cfg['cf']['cmd'], self.appname)
+        print('$ ' + cmd)
+        with Popen(cmd.split(' '), stdout=PIPE, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
             guid = proc.stdout.readline().rstrip('\r\n')
             if proc.returncode:
                 sys.exit(
                     "Failed retrieving the GUID for the specified app. Make sure {} is in this space!".format(self.appname))
 
         self.guid = guid
+        print(guid)
         return guid
 
     def _find_container_hosts(self, cfg):
@@ -423,11 +431,13 @@ class HostedApp:
         :param cfg: Configuration information about the environment.
         :return: The diego-cells which host this app and their associated sub-containers.
         """
-        with Popen('{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'],
-                                                  cfg['bosh']['cfdot-dc']),
-                   shell=True, stdin=PIPE, stdout=PIPE, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
-            stdout, _ = proc.communicate(input='cfdot actual-lrp-groups | grep --color=never {}\nexit\n'.format(self.guid),
-                                         timeout=30)
+        cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'],
+                                             cfg['bosh']['cfdot-dc'])
+        print('$ ' + cmd)
+        with Popen(cmd, shell=True, stdin=PIPE, stdout=PIPE, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
+            cmd = 'cfdot actual-lrp-groups | grep --color=never {}\nexit\n'.format(self.guid)
+            print('$> ' + cmd, end='')
+            stdout, _ = proc.communicate(input=cmd, timeout=30)
             if proc.returncode:
                 sys.exit("Failed retrieving LRP data from {}".format(cfg['bosh']['cfdot-dc']))
 
@@ -473,7 +483,9 @@ def cf_target(org, space, cfg):
     :param cfg: Configuration information about the environment.
     :return: The returncode of the cloud foundry CLI.
     """
-    return call([cfg['cf']['cmd'], 'target', '-o', org, '-s', space])
+    cmd = '{} target -o {} -s {}'.format(cfg['cf']['cmd'], org, space)
+    print('$ ' + cmd)
+    return call(cmd.split(' '), stdout=DEVNULL, stderr=DEVNULL)
 
 
 def main():
@@ -507,7 +519,7 @@ def main():
         app.load_hosts(TARGETED_HOSTS)
         app.unblock(cfg)
 
-    print("Done!")
+    print("\n=======\n Done!\n=======")
 
 
 if __name__ == '__main__':

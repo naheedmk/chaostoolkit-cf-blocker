@@ -1,9 +1,9 @@
 ---
 bosh:
   cmd: bosh2
-  env: blite
-  cf-dep: cf
-  cfdot-dc: diego-cell/0
+  env: tt-stg02
+  cf-dep: cf-da0ba81cb255ad93a508
+  cfdot-dc: diego_cell/0
 cf:
   cmd: cf
 container-port-whitelist:
