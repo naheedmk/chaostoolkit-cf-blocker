@@ -383,7 +383,7 @@ class HostedApp:
         """
         if dc.ip in self.diego_hosts:
             d_host = self.diego_hosts[dc.ip]
-            for cont_ip, cont_ports in dc.items():
+            for cont_ip, cont_ports in dc.containers.items():
                 d_host.add_instance(cont_ip, cont_ports)
         else:
             self.diego_hosts[dc.ip] = dc
