@@ -1,18 +1,94 @@
 import json
 import sys
 import yaml
+import re
+from socket import gethostbyname as dnslookup
 from subprocess import call, Popen, PIPE, DEVNULL
 
 # Default encoding we assume all pipes should use
 DEFAULT_ENCODING = 'UTF-8'
 
-# Record of past hosts we have targeted which allows us to undo our actions exactly as we had done them. This prevents
-# lingering rules from existing if CF moves an app between the time it was blocked and unblocked.
-TARGETED_HOSTS = 'targeted.json'
+# Record of past hosts and services we have targeted which allows us to undo our actions exactly as we had done them.
+# This prevents lingering rules from existing if CF moves an app between the time it was blocked and unblocked.
+TARGETED_LAST = 'targeted.json'
+
+# Record of what hosts and services were discovered on the last run. This is for reference only.
+DISCOVERY_FILE = 'discovered.json'
 
 # Number of times we should remove the iptables rule we added to block an app. This should be greater than one in case
 # you accident run this script to block it more than once before unblocking it.
 TIMES_TO_REMOVE = 6
+
+
+class Service:
+    @staticmethod
+    def from_service_info(service_type, service_config):
+        """
+        Given a service configuration object and the name of the service, extract the hosts and username/password
+        (if relevant).
+        :param service_type: Name of the service the configuration is for, e.g. are 'p-mysql' or 'p-config-server'.
+        :param service_config: Configuration object from VCAP_SERVICES for the provided service. Note, it is for one instance.
+        :return: TODO: determine what exactly we want to return.
+        """
+        type = service_type
+        name = service_config['name']
+        user = None
+        pswd = None
+        hosts = set()
+
+        credentials = service_config.get('credentials', None)
+
+        if type == 'p-config-server':
+            user = credentials['client_id']
+            pswd = credentials['client_secret']
+            match = re.match(r'https://([a-z0-9_.-]+):?(\d+)?', credentials['uri'])
+            ip = dnslookup(match[1])  # from my testing, the diego-cells *should* find the same values
+            port = match[2] or '443'
+            hosts.add((ip, port))
+        elif type == 'T-Logger':
+            match = re.match(r'syslog://([a-z0-9_.-]+):(\d+)', credentials['syslog_drain_url'])
+            ip = dnslookup(match[1])
+            hosts.add((ip, match[2]))
+        elif type == 'p-mysql':
+            user = credentials['username']
+            pswd = credentials['password']
+            hosts.add((credentials['hostname'], credentials['port']))
+        elif type == 'p-rabbitmq':
+            user = credentials['username']
+            pswd = credentials['password']
+            for pconfig in credentials['protocols'].values():
+                port = pconfig['port']
+                for host in pconfig['hosts']:
+                    hosts.add((host, port))
+        else:
+            print("Unrecognized service '{}'".format(type), file=sys.stderr)
+            return None
+
+        return Service(type, name, user, pswd, hosts)
+
+    def __init__(self, type, name, user, pswd, hosts):
+        """
+        :param type: String; type of service; e.g. 'p-mysql'.
+        :param name: String; name of this service instance (this is the name given when creating the service).
+        :param user: String; username credential for this service.
+        :param pswd: String; password credential for this service.
+        :param hosts: Set((String, String)); Set of (IP, Port) tuples for where this service is hosted.
+        """
+        self.type = type
+        self.name = name
+        self.user = user
+        self.pswd = pswd
+        self.hosts = hosts
+
+    def __repr__(self):
+        return 'Service({}, {}, {}, {}, {})'.format(self.type, self.name, self.user, self.pswd, self.hosts)
+
+    def id(self):
+        """
+        Generate a unique identifier for this service based on its name and type.
+        :return: A unique identifier for this service.
+        """
+        return '{}:{}'.format(self.type, self.name)
 
 
 class DiegoHost:
@@ -26,7 +102,7 @@ class DiegoHost:
         """
         Initialize a new Diego-cell representation.
 
-        :param ip: IP of this diego-cell.
+        :param ip: String; IP of this diego-cell.
         """
         self.ip = ip
         self.vm = None
@@ -129,7 +205,6 @@ class DiegoHost:
         cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm)
         print('$ ' + cmd)
         with Popen(cmd, shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
-
             for cont_ip, cont_ports in self.containers.items():
                 for cont_port in cont_ports:
                     print("Targeting {} on {}:{}".format(self.vm, cont_ip, cont_ports))
@@ -157,11 +232,64 @@ class DiegoHost:
             for cont_ip, cont_ports in self.containers.items():
                 for cont_port in cont_ports:
                     print("Unblocking {} on {}:{}".format(self.vm, cont_ip, cont_ports))
+                    cmd = 'sudo iptables -D FORWARD -d {} -p tcp --dport {} -j DROP\n'.format(cont_ip, cont_port)
+                    print('$> ' + cmd, end='')
                     for _ in range(TIMES_TO_REMOVE):
-                        cmd = 'sudo iptables -D FORWARD -d {} -p tcp --dport {} -j DROP\n'.format(cont_ip, cont_port)
-                        print('$> ' + cmd, end='')
                         proc.stdin.write(cmd)
             print("$> exit")
+            proc.stdin.write('exit\n')
+            proc.stdin.close()
+
+            return proc.returncode
+
+    def block_services(self, cfg, services):
+        """
+        Block instances of the application hosted on this DiegoCell from being able to reach and of the specified
+        services.
+        :param cfg: Configuration information about the environment.
+        :param services: List of services to be blocked.
+        :return: The returncode of the bosh ssh program.
+        """
+        cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm)
+        print('$ ' + cmd)
+        with Popen(cmd, shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
+            for cont_ip, cont_ports in self.containers.items():
+                for service in services.values():
+                    print("Targeting {} on {}".format(service.name, self.vm))
+                    for (s_ip, s_port) in service.hosts:
+                        cmd = 'sudo iptables -I FORWARD 1 -s {} -d {} -p tcp --dport {} -j DROP\n'\
+                            .format(cont_ip, s_ip, s_port)
+                        print('$> ' + cmd, end='')
+                        proc.stdin.write(cmd)
+
+            print('$> exit')
+            proc.stdin.write('exit\n')
+            proc.stdin.close()
+
+            return proc.returncode
+
+    def unblock_services(self, cfg, services):
+        """
+        Unblock instances of the application hosted on this DiegoCell from being able to reach and of the specified
+        services.
+        :param cfg: Configuration information about the environment.
+        :param services: List of services to be blocked.
+        :return: The returncode of the bosh ssh program.
+        """
+        cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm)
+        print('$ ' + cmd)
+        with Popen(cmd, shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
+            for cont_ip, cont_ports in self.containers.items():
+                for service in services.values():
+                    print("Unblocking {} on {}".format(service.name, self.vm))
+                    for (s_ip, s_port) in service.hosts:
+                        cmd = 'sudo iptables -D FORWARD -s {} -d {} -p tcp --dport {} -j DROP\n'\
+                            .format(cont_ip, s_ip, s_port)
+                        print('$> ' + cmd, end='')
+                        for _ in range(TIMES_TO_REMOVE):
+                            proc.stdin.write(cmd)
+
+            print('$> exit')
             proc.stdin.write('exit\n')
             proc.stdin.close()
 
@@ -176,9 +304,9 @@ class HostedApp:
     def __init__(self, org, space, appname):
         """
         Initialize a new hosted app object.
-        :param org: The cloud foundry organization the application is hosted in.
-        :param space: The cloud foundry organization space the application is hosted in.
-        :param appname: The name of the application deployment within cloud foundry.
+        :param org: String; the cloud foundry organization the application is hosted in.
+        :param space: String; the cloud foundry organization space the application is hosted in.
+        :param appname: String; the name of the application deployment within cloud foundry.
         """
 
         self.org = org
@@ -186,6 +314,7 @@ class HostedApp:
         self.appname = appname
         self.guid = None
         self.diego_hosts = {}
+        self.services = {}
 
     def __iter__(self):
         """
@@ -259,6 +388,20 @@ class HostedApp:
         else:
             self.diego_hosts[dc.ip] = dc
 
+    def add_service(self, service):
+        """
+        Adds a service as a dependency of this app. It will merge any of the service information if the new service
+        has the same type and name as one which is already present.
+        :param service: Service; The new Service to add/merge.
+        """
+        sid = service.id()
+        if sid in self.services:
+            e_service = self.services[sid]
+            assert e_service.user == service.user and e_service.pswd == service.pswd
+            e_service.hosts |= service.hosts  # union the hosts
+        else:
+            self.services[service.id()] = service
+
     def find_hosts(self, cfg):
         """
         Find all diego-cells and respective containers which host this application. This will first find the GUID of the
@@ -275,9 +418,49 @@ class HostedApp:
 
         return self.diego_hosts
 
+    def find_services(self, cfg):
+        """
+        Discover all services bound to this application. This will use `cf env` and parse the output for VCAP_SERVICES.
+        :param cfg: Configuration information about the environment.
+        :return: The list of all services bound to this application.
+        """
+        cmd = '{} env {}'.format(cfg['cf']['cmd'], self.appname)
+        print('> ' + cmd)
+        with Popen(cmd.split(' '), stdout=PIPE, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
+            if proc.returncode:
+                sys.exit("Failed to query application environment variables.")
+
+            lines = proc.stdout.readlines()
+
+        json_objs = extract_json(''.join(lines))
+        if not json_objs:
+            sys.exit("Error reading output from `cf env`")
+
+        for obj in json_objs:
+            if 'VCAP_SERVICES' not in obj:
+                json_objs.remove(obj)
+
+        if len(json_objs) != 1:
+            sys.exit("Could not find VCAP_SERVICES in output.")
+
+        services = json_objs[0]['VCAP_SERVICES']
+        print(json.dumps(services, indent='  '))
+
+        for service, sconfig in services.items():
+            if service in cfg['service-whitelist']:
+                continue
+
+            for instance_cfg in sconfig:
+                s = Service.from_service_info(service, instance_cfg)
+                if s:
+                    print(s)
+                    self.add_service(s)
+
+        return self.services
+
     def block(self, cfg):
         """
-        Block this application on all its known hosts.
+        Block access to this application on all its known hosts.
         :param cfg: Configuration information about the environment.
         :return: A returncode if any of the bosh ssh instances does not return 0.
         """
@@ -285,15 +468,15 @@ class HostedApp:
             ret = dc.block(cfg)
 
             if ret:
-                print("WARNING: could not block all hosts; failed on {}.".format(dc.vm), file=sys.stderr)
+                print("WARNING: could not block host {}.".format(dc.vm), file=sys.stderr)
                 return ret
 
         return 0
 
     def unblock(self, cfg):
         """
-        Unblock this application on all its known hosts. This will actually run the unblock commands multiple times, as
-        defined by `TIMES_TO_REMOVE` to prevent issues if an application was blocked multiple times.
+        Unblock access to this application on all its known hosts. This will actually run the unblock commands multiple
+        times, as defined by `TIMES_TO_REMOVE` to prevent issues if an application was blocked multiple times.
         :param cfg: Configuration information about the environment.
         :return: A returncode if any of the bosh ssh instances does not return 0.
         """
@@ -301,22 +484,57 @@ class HostedApp:
             ret = dc.unblock(cfg)
 
             if ret:
-                print("WARNING: could not unblock all hosts; failed on {}.".format(dc.vm), file=sys.stderr)
+                print("WARNING: could not unblock host {}.".format(dc.vm), file=sys.stderr)
                 return ret
 
         return 0
 
-    def save_hosts(self, filename):
+    def block_services(self, cfg):
         """
-        Save all known hosts to a json file. This allows for the same hosts that were blocked to be unblocked even if
-        cloud foundry moves application instances to a different container or diego-cell.
-        :param filename: The name of the file to save the json object to.
+        Block this application from accessing its services on all its known hosts.
+        :param cfg: Configuration information about the environment.
+        :return: A returncode if any of the bosh ssh instances does not return 0.
         """
-        try:
-            with open(filename, 'r') as file:
-                j = json.load(file)
-        except FileNotFoundError:
+
+        for dc in self.diego_hosts.values():
+            ret = dc.block_services(cfg, self.services)
+
+            if ret:
+                print("WARNING: could not block all services on host {}".format(dc.vm), file=sys.stderr)
+                return ret
+
+        return 0
+
+    def unblock_services(self, cfg):
+        """
+        Unblock this application from accessing its services on all its known hosts.
+        :param cfg: Configuration information about the environment.
+        :return: A returncode if any of the bosh ssh instances does not return 0.
+        """
+        for dc in self.diego_hosts.values():
+            ret = dc.unblock_services(cfg, self.services)
+
+            if ret:
+                print("WARNING: could not unblock all services on host {}.".format(dc.vm), file=sys.stderr)
+                return ret
+
+        return 0
+
+    def save(self, filename, overwrite=False):
+        """
+        Save all known hosts and services to a json file. This allows for the same hosts that were blocked to be
+        unblocked even if cloud foundry moves application instances to a different container or diego-cell.
+        :param filename: String; The name of the file to save the json object to.
+        :param overwrite: bool; If true, overwrite the entire file instead of appending this object to the file.
+        """
+        if overwrite:
             j = {}
+        else:
+            try:
+                with open(filename, 'r') as file:
+                    j = json.load(file)
+            except FileNotFoundError:
+                j = {}
 
         if self.id() in j:
             japp = j[self.id()]
@@ -326,7 +544,8 @@ class HostedApp:
                 'appname': self.appname,
                 'org': self.org,
                 'space': self.space,
-                'diego_hosts': {}
+                'diego_hosts': {},
+                'services': {}
             }
 
         for dc in self.diego_hosts.values():
@@ -341,19 +560,35 @@ class HostedApp:
                 jports = set(jdc.get(cont_ip, []))
                 jdc['containers'][cont_ip] = list(jports | cont_ports)
 
-            japp['diego_hosts'][dc.ip] = jdc
+                japp['diego_hosts'][dc.ip] = jdc
+
+        for sid, service in self.services.items():
+            if sid in japp['services']:
+                jsrv = japp['services'][sid]
+                assert self._validate_jservice(jsrv)
+                nhosts = set([tuple(x) for x in jsrv['hosts']]) | service.hosts
+                jsrv['hosts'] = list(nhosts)
+            else:
+                japp['services'][sid] = {
+                    'type': service.type,
+                    'name': service.name,
+                    'user': service.user,
+                    'pswd': service.pswd,
+                    'hosts': list(service.hosts)
+                }
+
         j[self.id()] = japp
 
         with open(filename, 'w') as file:
-            json.dump(j, file, indent=2, sort_keys=True)
+            json.dump(j, file, indent=2)
 
-    def load_hosts(self, filename, remove=True):
+    def load(self, filename, readonly=False):
         """
-        Load a json file of known hosts. This allows for the same hosts that were blocked to be unblocked even if cloud
-        foundry moves application instances to a different container or diego-cell. This will remove the entries for the
-        specific app from the json file if `remove` is `True`.
-        :param filename: The name of the json file to load information from.
-        :param remove: Whether we should remove the entries this specific app or leave the file as it was.
+        Load a json file of known hosts and services. This allows for the same hosts that were blocked to be unblocked
+        even if cloud foundry moves application instances to a different container or diego-cell. This will remove the
+        entries for the specific app from the json file if `readonly` is `False`.
+        :param filename: String; The name of the json file to load information from.
+        :param readonly: bool; Whether we should remove the entries this specific app or leave the file as it was.
         """
         with open(filename, 'r') as file:
             j = json.load(file)
@@ -374,7 +609,13 @@ class HostedApp:
 
             self.add_diego_cell(dc)
 
-        if remove:
+        for jservice in japp['services'].values():
+            assert self._validate_jservice(jservice)
+            hosts = set([tuple(x) for x in jservice['hosts']])
+            service = Service(jservice['type'], jservice['name'], jservice['user'], jservice['pswd'], hosts)
+            self.add_service(service)
+
+        if not readonly:
             with open(filename, 'w') as file:
                 # dump the json missing the hosts that we are unblocking
                 json.dump(j, file, indent=2, sort_keys=True)
@@ -394,7 +635,7 @@ class HostedApp:
         """
         Quick way to verify a dictionary representation of a diego-host is valid. This is used to validate json
         information.
-        :param jdc: Dictionary ojbect to validate.
+        :param jdc: Dictionary object to validate.
         :return: Whether it is a valid application representation.
         """
         dc = self.diego_hosts.get(jdc['ip'], None)
@@ -405,6 +646,20 @@ class HostedApp:
             dc is None or \
             dc.vm is None or \
             jdc['vm'] == dc.vm
+
+    def _validate_jservice(self, jservice):
+        """
+        Quick way to verify a dictionary represenation of a service is valid. This is used to validate json information.
+        :param jservice: Dictionary object to validate.
+        :return: Whether it is a valid service representation.
+        """
+        service = self.services.get('{}:{}'.format(jservice['type'], jservice['name']))  # TODO: fix code duplication!
+        return \
+            service is None or (
+                service.user == jservice['user'] and
+                service.pswd == jservice['pswd'] and
+                jservice['hosts'] is not None
+            )
 
     def _find_guid(self, cfg):
         """
@@ -441,12 +696,9 @@ class HostedApp:
             if proc.returncode:
                 sys.exit("Failed retrieving LRP data from {}".format(cfg['bosh']['cfdot-dc']))
 
-            stdout = stdout.splitlines()
-            for line in stdout:
-                try:
-                    instance = json.loads(line)['instance']
-                except json.JSONDecodeError:
-                    continue
+            json_objs = extract_json(stdout)
+            for obj in json_objs:
+                instance = obj['instance']
 
                 if instance['state'] != 'RUNNING':
                     continue
@@ -488,6 +740,41 @@ def cf_target(org, space, cfg):
     return call(cmd.split(' '), stdout=DEVNULL, stderr=DEVNULL)
 
 
+def extract_json(string):
+    """
+    Extract JSON from a string by scanning for the start `{` and end `}`. It will extract this from a string and then
+    load it as a JSON object. If multiple json objects are detected, it will create a list of them. If no JSON is found,
+    then None will be returned.
+    :param string: String; String possibly containing one or more JSON objects.
+    :return: Optional(list(dict[String, String)); A list of JSON objects or None.
+    """
+    depth = 0
+    objstrs = []
+    for index, char in enumerate(string):
+        if char == '{':
+            depth += 1
+
+            if depth == 1:
+                start = index
+        elif char == '}' and depth > 0:
+            depth -= 1
+
+            if depth == 0:
+                objstrs.append(string[start:index+1])
+
+    if len(objstrs) <= 0:
+        return None
+
+    objs = []
+    for s in objstrs:
+        try:
+            objs.append(json.loads(s))
+        except json.JSONDecodeError:
+            # ignore it and move on
+            pass
+    return objs
+
+
 def main():
     """
     The function which should be called if this is being used as an executable and not being imported as a library.
@@ -502,8 +789,8 @@ def main():
     with open(config_path, 'r') as file:
         cfg = yaml.load(file)
 
-    assert args[0] in ['block', 'unblock']
-    block = args[0] == 'block'
+    assert args[0] in ['block', 'unblock', 'block_services', 'discover']
+    action = args[0]
 
     app = HostedApp(args[1], args[2], args[3])
 
@@ -511,13 +798,25 @@ def main():
         sys.exit("Failed to target {} and {}. Make sure you are logged in and the names are correct!"
                  .format(app.org, app.space))
 
-    if block:
+    if action == 'block':
         app.find_hosts(cfg)
-        app.save_hosts(TARGETED_HOSTS)
+        app.save(TARGETED_LAST)
         app.block(cfg)
-    else:
-        app.load_hosts(TARGETED_HOSTS)
+    elif action == 'unblock':
+        app.load(TARGETED_LAST)
         app.unblock(cfg)
+        app.unblock_services(cfg)
+    elif action == 'block_services':
+        app.find_hosts(cfg)
+        app.find_services(cfg)
+        app.save(TARGETED_LAST)
+        app.block_services(cfg)
+    elif action == 'discover':
+        app.find_hosts(cfg)
+        app.find_services(cfg)
+        app.save(DISCOVERY_FILE, overwrite=True)
+    else:
+        sys.exit("UNKNOWN OPTION!")
 
     print("\n=======\n Done!\n=======")
 

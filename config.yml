@@ -10,3 +10,5 @@ container-port-whitelist:
  - 22
  - 2222
 host-port-whitelist: []
+service-whitelist:
+ - T-Logger
