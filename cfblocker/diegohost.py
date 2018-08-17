@@ -13,7 +13,6 @@ class DiegoHost:
     def __init__(self, ip):
         """
         Initialize a new Diego-cell representation.
-
         :param ip: String; IP of this diego-cell.
         """
         self.ip = ip
@@ -31,7 +30,7 @@ class DiegoHost:
         """
         Check if this Diego-cell contains a given container.
         :param item: The container IP.
-        :return: Whether the containers is in this Diego-cell.
+        :return: Whether the container is in this Diego-cell.
         """
         return self.containers.__contains__(item)
 
@@ -71,6 +70,9 @@ class DiegoHost:
         :param key: The container IP.
         """
         return self.containers.__delitem__(key)
+
+    def __repr__(self):
+        return 'DiegoHost({}:{})'.format(self.ip, self.vm)
 
     def add_instance(self, cont_ip, cont_ports):
         """

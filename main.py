@@ -1,7 +1,7 @@
 import sys
 import yaml
 
-from cfblocker.app import HostedApp
+from cfblocker.app import App
 from cfblocker.util import cf_target
 
 # Record of past hosts and services we have targeted which allows us to undo our actions exactly as we had done them.
@@ -29,7 +29,7 @@ def main():
     assert args[0] in ['block', 'unblock', 'block_services', 'discover']
     action = args[0]
 
-    app = HostedApp(args[1], args[2], args[3])
+    app = App(args[1], args[2], args[3])
 
     if cf_target(app.org, app.space, cfg):
         sys.exit("Failed to target {} and {}. Make sure you are logged in and the names are correct!"

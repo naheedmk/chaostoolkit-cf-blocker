@@ -8,7 +8,7 @@ from cfblocker.util import extract_json
 from subprocess import Popen, PIPE, DEVNULL
 
 
-class HostedApp:
+class App:
     """
     Information about an application and all of the locations it is hosted.
     """
@@ -79,6 +79,9 @@ class HostedApp:
         :param key: The IP address of the diego-cell.
         """
         return self.diego_hosts.__delitem__(key)
+
+    def __repr__(self):
+        return 'App({}:{}:{})'.format(self.org, self.space, self.appname)
 
     def id(self):
         """
