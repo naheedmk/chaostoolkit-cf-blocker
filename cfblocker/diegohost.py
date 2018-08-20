@@ -22,22 +22,22 @@ class DiegoHost:
     def __iter__(self):
         """
         Iterate over the containers in this Diego-cell.
-        :return: An iterator over the containers in this Diego-cell.
+        :return: Iter; An iterator over the containers in this Diego-cell.
         """
         return self.containers.__iter__()
 
     def __contains__(self, item):
         """
         Check if this Diego-cell contains a given container.
-        :param item: The container IP.
-        :return: Whether the container is in this Diego-cell.
+        :param item: String; The container IP.
+        :return: bool; Whether the container is in this Diego-cell.
         """
         return self.containers.__contains__(item)
 
     def __len__(self):
         """
         Find how many containers are within this Diego-cell.
-        :return: The number of containers within this Diego-cell.
+        :return: int; The number of containers within this Diego-cell.
         """
         return len(self.containers)
 
@@ -51,23 +51,23 @@ class DiegoHost:
     def __getitem__(self, cont_ip):
         """
         Get a container within this Diego-cell by its IP.
-        :param cont_ip: IP of the container in question.
-        :return: The set of ports on that container the application is attached to.
+        :param cont_ip: String; IP of the container in question.
+        :return: Set[int]; The set of ports on that container the application is attached to.
         """
         return self.containers[cont_ip]
 
     def __setitem__(self, key, value):
         """
         Set the ports the application is attached to for the given container.
-        :param key: The container IP for which the ports are relevant.
-        :param value: Set of ports the application is bound to.
+        :param key: String; The container IP for which the ports are relevant.
+        :param value: Set[int]; Set of ports the application is bound to.
         """
         self.containers[key] = value
 
     def __delitem__(self, key):
         """
         Remove a container and its set of ports.
-        :param key: The container IP.
+        :param key: String; The container IP.
         """
         return self.containers.__delitem__(key)
 
@@ -78,8 +78,8 @@ class DiegoHost:
         """
         Add a new container or new container ports. It will automatically merge ports instead of replacing the existing
         entry if there is already information for the specified container.
-        :param cont_ip: IP Address of the container hosted on this diego-cell.
-        :param cont_ports: The set of ports which the application is bound to on the container.
+        :param cont_ip: String; IP Address of the container hosted on this diego-cell.
+        :param cont_ports: Set[int]; The set of ports which the application is bound to on the container.
         """
         ports = self.containers.get(cont_ip, set())
         ports |= cont_ports
@@ -89,8 +89,8 @@ class DiegoHost:
         """
         Query bosh for the VM name of this diego cell given its IP address. This will simply return the current VM name
         if it has already been found.
-        :param cfg: Configuration information about the environment.
-        :return: The VM name.
+        :param cfg: Dict[String, any]; Configuration information about the environment.
+        :return: Optional[String]; The VM name.
         """
         if self.vm:
             return self.vm
@@ -113,8 +113,8 @@ class DiegoHost:
         """
         Block the application on this diego-cell. It will create new iptables rules on the diego-cell to block all
         traffic forwarded to the application.
-        :param cfg: Configuration information about the environment.
-        :return: The returncode of the bosh ssh program.
+        :param cfg: Dict[String, any]; Configuration information about the environment.
+        :return: int; The returncode of the bosh ssh program.
         """
         cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm)
         print('$ ' + cmd)
@@ -137,8 +137,8 @@ class DiegoHost:
         Unblock the application on this diego-cell. It will delete the iptables rule on this diego-cell based on its
         description. (i.e. it does not blindly delete the first item which allows multiple different apps to be blocked
         on the same diego-cell.)
-        :param cfg: Configuration information about the environment.
-        :return: The returncode of the bosh ssh program.
+        :param cfg: Dict[String, any]; Configuration information about the environment.
+        :return: int; The returncode of the bosh ssh program.
         """
         cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm)
         print('$ ' + cmd)
@@ -186,9 +186,9 @@ class DiegoHost:
         """
         Unblock instances of the application hosted on this DiegoCell from being able to reach and of the specified
         services.
-        :param cfg: Configuration information about the environment.
-        :param services: List of services to be blocked.
-        :return: The returncode of the bosh ssh program.
+        :param cfg: Dict[String, any]; Configuration information about the environment.
+        :param services: Dict[String, Service]; List of services to be blocked.
+        :return: int; The returncode of the bosh ssh program.
         """
         cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm)
         print('$ ' + cmd)

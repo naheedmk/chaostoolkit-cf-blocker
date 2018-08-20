@@ -22,7 +22,7 @@ def extract_json(string):
     load it as a JSON object. If multiple json objects are detected, it will create a list of them. If no JSON is found,
     then None will be returned.
     :param string: String; String possibly containing one or more JSON objects.
-    :return: Optional(list(dict[String, String)); A list of JSON objects or None.
+    :return: Optional[list[dict[String, any]]]; A list of JSON objects or None.
     """
     depth = 0
     objstrs = []

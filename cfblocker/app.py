@@ -31,22 +31,22 @@ class App:
     def __iter__(self):
         """
         Iterate over each of the diego-cells the application is hosted on.
-        :return: An iterator over the diego-cells the application is hosted on.
+        :return: Iter; An iterator over the diego-cells the application is hosted on.
         """
         return self.diego_hosts.__iter__()
 
     def __contains__(self, item):
         """
         Check if a given diego-cell is listed as a host of this application.
-        :param item: The IP of the diego-cell.
-        :return: Whether the diego-cell is a known of this application.
+        :param item: String; The IP of the diego-cell.
+        :return: bool; Whether the diego-cell is a known of this application.
         """
         return self.diego_hosts.__contains__(item)
 
     def __len__(self):
         """
         Find how many diego-cells host this application.
-        :return: The number of diego-cells which host this application.
+        :return: int; The number of diego-cells which host this application.
         """
         return len(self.diego_hosts)
 
@@ -60,23 +60,23 @@ class App:
     def __getitem__(self, item):
         """
         Retrieve information about a diego-cell which hosts this application.
-        :param item: The IP address of the diego-cell in question.
-        :return: The diego-cell with the given IP address.
+        :param item: String; The IP address of the diego-cell in question.
+        :return: DiegoHost; The diego-cell with the given IP address.
         """
         return self.diego_hosts[item]
 
     def __setitem__(self, key, value):
         """
         Specify a diego-cell host of this application.
-        :param key: The IP address of the diego-cell.
-        :param value: Thew diego-cell information.
+        :param key: String; The IP address of the diego-cell.
+        :param value: DiegoHost; Thew diego-cell information.
         """
         self.diego_hosts[key] = value
 
     def __delitem__(self, key):
         """
         Remove a diego-cell as a known host of this application.
-        :param key: The IP address of the diego-cell.
+        :param key: String; The IP address of the diego-cell.
         """
         return self.diego_hosts.__delitem__(key)
 
@@ -86,7 +86,7 @@ class App:
     def id(self):
         """
         Create a unique descriptor for this application. It will take the form 'org_space_appname'.
-        :return: A unique descriptor for this application.
+        :return: String; A unique descriptor for this application.
         """
         return '{}_{}_{}'.format(self.org, self.space, self.appname)
 
@@ -94,7 +94,7 @@ class App:
         """
         Adds a diego cell as a host of this app. It will merge any of the internal container information if the new
         diego-cell is already present.
-        :param dc: The new Diego-cell to add/merge
+        :param dc: DiegoHost; The new Diego-cell to add/merge
         """
         if dc.ip in self.diego_hosts:
             d_host = self.diego_hosts[dc.ip]
@@ -122,8 +122,8 @@ class App:
         Find all diego-cells and respective containers which host this application. This will first find the GUID of the
         CF application and then find what diego-cells and containers are running the application. It will update the
         internal hosts lists as well as return the information.
-        :param cfg: Configuration information about the environment.
-        :return: The list of diego-cells which host this application.
+        :param cfg: Dict[String, any]; Configuration information about the environment.
+        :return: Dict[String, DiegoHost]; The list of diego-cells which host this application.
         """
         self._find_guid(cfg)
         self._find_container_hosts(cfg)
@@ -136,8 +136,8 @@ class App:
     def find_services(self, cfg):
         """
         Discover all services bound to this application. This will use `cf env` and parse the output for VCAP_SERVICES.
-        :param cfg: Configuration information about the environment.
-        :return: The list of all services bound to this application.
+        :param cfg: Dict[String, any]; Configuration information about the environment.
+        :return: Dict[String, Service]; The list of all services bound to this application.
         """
         cmd = '{} env {}'.format(cfg['cf']['cmd'], self.appname)
         print('> ' + cmd)
@@ -176,8 +176,8 @@ class App:
     def block(self, cfg):
         """
         Block access to this application on all its known hosts.
-        :param cfg: Configuration information about the environment.
-        :return: A returncode if any of the bosh ssh instances does not return 0.
+        :param cfg: Dict[String, any]; Configuration information about the environment.
+        :return: int; A returncode if any of the bosh ssh instances does not return 0.
         """
         for dc in self.diego_hosts.values():
             ret = dc.block(cfg)
@@ -192,8 +192,8 @@ class App:
         """
         Unblock access to this application on all its known hosts. This will actually run the unblock commands multiple
         times, as defined by `TIMES_TO_REMOVE` to prevent issues if an application was blocked multiple times.
-        :param cfg: Configuration information about the environment.
-        :return: A returncode if any of the bosh ssh instances does not return 0.
+        :param cfg: Dict[String, any]; Configuration information about the environment.
+        :return: int; A returncode if any of the bosh ssh instances does not return 0.
         """
         for dc in self.diego_hosts.values():
             ret = dc.unblock(cfg)
@@ -207,8 +207,8 @@ class App:
     def block_services(self, cfg):
         """
         Block this application from accessing its services on all its known hosts.
-        :param cfg: Configuration information about the environment.
-        :return: A returncode if any of the bosh ssh instances does not return 0.
+        :param cfg: Dict[String, any]; Configuration information about the environment.
+        :return: int; A returncode if any of the bosh ssh instances does not return 0.
         """
 
         for dc in self.diego_hosts.values():
@@ -223,8 +223,8 @@ class App:
     def unblock_services(self, cfg):
         """
         Unblock this application from accessing its services on all its known hosts.
-        :param cfg: Configuration information about the environment.
-        :return: A returncode if any of the bosh ssh instances does not return 0.
+        :param cfg: Dict[String, any]; Configuration information about the environment.
+        :return: int; A returncode if any of the bosh ssh instances does not return 0.
         """
         for dc in self.diego_hosts.values():
             ret = dc.unblock_services(cfg, self.services)
@@ -238,8 +238,8 @@ class App:
     def serialize(self, obj=None):
         """
         Convert this class into a dictionary representation of itself.
-        :param obj: A dictionary to serialize into and merge information with.
-        :return: A dictionary representation of this object.
+        :param obj: Dict[String, any]; A dictionary to serialize into and merge information with.
+        :return: Dict[String, any]; A dictionary representation of this object.
         """
         if obj is None:
             obj = {}
@@ -292,7 +292,7 @@ class App:
     def deserialize(obj, org, space, appname, readonly=False):
         """
         Convert a dictionary representation of this class into an instance of this class.
-        :return: An instance of this class.
+        :return: App; An instance of this class.
         """
         self = App(org, space, appname)
         app = obj.get(self.id(), None) if readonly else obj.pop(self.id(), None)
@@ -328,7 +328,7 @@ class App:
     def _validate_japp(self, japp):
         """
         Quick way to verify a dictionary representation of an app is valid. This is used to validate json information.
-        :param japp: Dictionary object to validate.
+        :param japp: Dict[String, any]; Dictionary object to validate.
         :return: Whether it is a valid application representation.
         """
         return \
@@ -340,8 +340,8 @@ class App:
         """
         Quick way to verify a dictionary representation of a diego-host is valid. This is used to validate json
         information.
-        :param jdc: Dictionary object to validate.
-        :return: Whether it is a valid application representation.
+        :param jdc: Dict[String, any]; Dictionary object to validate.
+        :return: bool; Whether it is a valid application representation.
         """
         dc = self.diego_hosts.get(jdc['ip'], None)
         # if we do not know about this diego-cell, we are good
@@ -355,8 +355,8 @@ class App:
     def _validate_jservice(self, jservice):
         """
         Quick way to verify a dictionary represenation of a service is valid. This is used to validate json information.
-        :param jservice: Dictionary object to validate.
-        :return: Whether it is a valid service representation.
+        :param jservice: Dict[String, any]; Dictionary object to validate.
+        :return: bool; Whether it is a valid service representation.
         """
         service = self.services.get('{}:{}'.format(jservice['type'], jservice['name']))  # TODO: fix code duplication!
         return \
@@ -370,8 +370,8 @@ class App:
         """
         Find the GUID of an application using cloud foundry's CLI interface. The GUID acts as a unique identifier for
         the application which we can then use to find what containers are running it.
-        :param cfg: Configuration information about the environment.
-        :return: The application GUID.
+        :param cfg: Dict[String, any]; Configuration information about the environment.
+        :return: String; The application GUID.
         """
         cmd = '{} app {} --guid'.format(cfg['cf']['cmd'], self.appname)
         print('$ ' + cmd)
@@ -388,8 +388,8 @@ class App:
     def _find_container_hosts(self, cfg):
         """
         Find the containers which host this application by using cfdot.
-        :param cfg: Configuration information about the environment.
-        :return: The diego-cells which host this app and their associated sub-containers.
+        :param cfg: Dict[String, any]; Configuration information about the environment.
+        :return: Dict[String, DiegoHost]; The diego-cells which host this app and their associated sub-containers.
         """
         cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'],
                                              cfg['bosh']['cfdot-dc'])

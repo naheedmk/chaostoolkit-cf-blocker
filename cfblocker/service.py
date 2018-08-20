@@ -15,8 +15,8 @@ class Service:
         """
         Given a service configuration object and the name of the service, extract the hosts and username/password
         (if relevant).
-        :param service_type: Name of the service the configuration is for, e.g. are 'p-mysql' or 'p-config-server'.
-        :param service_config: Configuration object from VCAP_SERVICES for the provided service. Note, it is for one instance.
+        :param service_type: String; Name of the service the configuration is for, e.g. are 'p-mysql' or 'p-config-server'.
+        :param service_config: Optional[Dict[String, any]]; Configuration object from VCAP_SERVICES for the provided service. Note, it is for one instance.
         :return: TODO: determine what exactly we want to return.
         """
         stype = service_type
@@ -62,7 +62,7 @@ class Service:
         :param name: String; name of this service instance (this is the name given when creating the service).
         :param user: String; username credential for this service.
         :param pswd: String; password credential for this service.
-        :param hosts: Set((String, String)); Set of (IP, Port) tuples for where this service is hosted.
+        :param hosts: Set[(String, String)]; Set of (IP, Port) tuples for where this service is hosted.
         """
         self.type = type
         self.name = name
@@ -73,22 +73,22 @@ class Service:
     def __iter__(self):
         """
         Iterate over the hosts of this service.
-        :return: An iterator over the hosts of this service.
+        :return: Iter; An iterator over the hosts of this service.
         """
         return self.hosts.__iter__()
 
     def __contains__(self, item):
         """
         Check if this Service contains a given host.
-        :param item: The Host (IP, Port) tuple.
-        :return: Whether it is a known host of this service.
+        :param item: (String, String); The Host (IP, Port) tuple.
+        :return: bool; Whether it is a known host of this service.
         """
         return item in self.hosts
 
     def __len__(self):
         """
         Count the number of known hosts for this service.
-        :return: The number of known hosts for this service.
+        :return: int; The number of known hosts for this service.
         """
         return len(self.hosts)
 
@@ -102,15 +102,15 @@ class Service:
     def __delitem__(self, host):
         """
         Remove a known host from this service.
-        :param host: The (IP, Port) of the host to be removed.
+        :param host: (String, String); The (IP, Port) of the host to be removed.
         """
         return self.hosts.__delitem__(host)
 
     def add(self, ip, port):
         """
         Add a new host for this Service.
-        :param ip: The host's IP address.
-        :param port: The port the service is listening to.
+        :param ip: String; The host's IP address.
+        :param port: String; The port the service is listening to.
         """
         self.hosts.add((ip, port))
 
@@ -120,6 +120,6 @@ class Service:
     def id(self):
         """
         Generate a unique identifier for this service based on its name and type.
-        :return: A unique identifier for this service.
+        :return: String; A unique identifier for this service.
         """
         return '{}:{}'.format(self.type, self.name)
