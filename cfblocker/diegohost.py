@@ -170,9 +170,9 @@ class DiegoHost:
             for cont_ip, cont_ports in self.containers.items():
                 for service in services.values():
                     print("Targeting {} on {}".format(service.name, self.vm))
-                    for (s_ip, s_port) in service.hosts:
-                        cmd = 'sudo iptables -I FORWARD 1 -s {} -d {} -p tcp --dport {} -j DROP\n'\
-                            .format(cont_ip, s_ip, s_port)
+                    for (s_ip, s_protocol, s_port) in service.hosts:
+                        cmd = 'sudo iptables -I FORWARD 1 -s {} -d {} -p {} --dport {} -j DROP\n'\
+                            .format(cont_ip, s_ip, s_protocol, s_port)
                         print('$> ' + cmd, end='')
                         proc.stdin.write(cmd)
 
@@ -196,9 +196,9 @@ class DiegoHost:
             for cont_ip, cont_ports in self.containers.items():
                 for service in services.values():
                     print("Unblocking {} on {}".format(service.name, self.vm))
-                    for (s_ip, s_port) in service.hosts:
-                        cmd = 'sudo iptables -D FORWARD -s {} -d {} -p tcp --dport {} -j DROP\n'\
-                            .format(cont_ip, s_ip, s_port)
+                    for (s_ip, s_protocol, s_port) in service.hosts:
+                        cmd = 'sudo iptables -D FORWARD -s {} -d {} -p {} --dport {} -j DROP\n'\
+                            .format(cont_ip, s_ip, s_protocol, s_port)
                         print('$> ' + cmd, end='')
                         for _ in range(TIMES_TO_REMOVE):
                             proc.stdin.write(cmd)

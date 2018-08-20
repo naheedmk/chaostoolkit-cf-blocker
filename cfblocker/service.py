@@ -33,22 +33,22 @@ class Service:
             match = re.match(r'https://([a-z0-9_.-]+):?(\d+)?', credentials['uri'])
             ip = dnslookup(match[1])  # from my testing, the diego-cells *should* find the same values
             port = match[2] or '443'
-            hosts.add((ip, port))
+            hosts.add((ip, 'tcp', port))
         elif stype == 'T-Logger':
             match = re.match(r'syslog://([a-z0-9_.-]+):(\d+)', credentials['syslog_drain_url'])
             ip = dnslookup(match[1])
-            hosts.add((ip, match[2]))
+            hosts.add((ip, 'tcp', match[2]))
         elif stype == 'p-mysql':
             user = credentials['username']
             pswd = credentials['password']
-            hosts.add((credentials['hostname'], credentials['port']))
+            hosts.add((credentials['hostname'], 'tcp', credentials['port']))
         elif stype == 'p-rabbitmq':
             user = credentials['username']
             pswd = credentials['password']
             for pconfig in credentials['protocols'].values():
                 port = pconfig['port']
                 for host in pconfig['hosts']:
-                    hosts.add((host, port))
+                    hosts.add((host, 'tcp', port))
         else:
             print("Unrecognized service '{}'".format(stype), file=sys.stderr)
             return None
