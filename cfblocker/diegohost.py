@@ -208,3 +208,49 @@ class DiegoHost:
             proc.stdin.close()
 
             return proc.returncode
+
+    def serialize(self, obj=None):
+        """
+        Convert this class into a dictionary representation of itself.
+        :param obj: Dict[String, any]; A dictionary to serialize into and merge information with. The keys should be the IPs of DiegoHosts.
+        :return: Dict[String, any]; A dictionary representation of this object.
+        """
+        if obj is None:
+            obj = {}
+
+        if self.ip in obj:
+            jdc = obj[self.ip]
+            assert jdc['vm'] == self.vm
+            assert jdc['ip'] == self.ip
+        else:
+            jdc = {
+                'ip': self.ip,
+                'vm': self.vm,
+                'containers': {}
+            }
+
+        for cont_ip, cont_ports in self.containers.items():
+            jports = set(jdc.get(cont_ip, []))
+            jdc['containers'][cont_ip] = list(jports | cont_ports)
+
+            obj[self.ip] = jdc
+
+        return obj
+
+    @staticmethod
+    def deserialize(obj, ip):
+        """
+        Convert a dictionary representation of this class into an instance of this class.
+        :param obj: Dict[String, any]; Dictionary to deserialize from in the form {"IP": {DiegoHost}, ...}.
+        :param ip: String; The IP of the DiegoHost to deserialize.
+        :return: DiegoHost; An instance of this class.
+        """
+        self = DiegoHost(ip)
+        jdc = obj[ip]
+        assert jdc['ip'] == ip
+        self.vm = jdc['vm']
+
+        for cont_ip, cont_ports in jdc['containers'].items():
+            self.add_instance(cont_ip, set(cont_ports))
+
+        return self

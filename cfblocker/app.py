@@ -238,7 +238,7 @@ class App:
     def serialize(self, obj=None):
         """
         Convert this class into a dictionary representation of itself.
-        :param obj: Dict[String, any]; A dictionary to serialize into and merge information with.
+        :param obj: Dict[String, any]; A dictionary to serialize into and merge information with. The keys should be in the form `org_space_appname`.
         :return: Dict[String, any]; A dictionary representation of this object.
         """
         if obj is None:
@@ -257,33 +257,10 @@ class App:
             }
 
         for dc in self.diego_hosts.values():
-            if dc.ip in app['diego_hosts']:
-                jdc = app['diego_hosts'][dc.ip]
-                assert jdc['vm'] == dc.vm
-                assert jdc['ip'] == dc.ip
-            else:
-                jdc = {'ip': dc.ip, 'vm': dc.vm, 'containers': {}}
+            dc.serialize(obj=app['diego_hosts'])
 
-            for cont_ip, cont_ports in dc.containers.items():
-                jports = set(jdc.get(cont_ip, []))
-                jdc['containers'][cont_ip] = list(jports | cont_ports)
-
-                app['diego_hosts'][dc.ip] = jdc
-
-        for sid, service in self.services.items():
-            if sid in app['services']:
-                jsrv = app['services'][sid]
-                assert self._validate_jservice(jsrv)
-                nhosts = set([tuple(x) for x in jsrv['hosts']]) | service.hosts
-                jsrv['hosts'] = list(nhosts)
-            else:
-                app['services'][sid] = {
-                    'type': service.type,
-                    'name': service.name,
-                    'user': service.user,
-                    'pswd': service.pswd,
-                    'hosts': list(service.hosts)
-                }
+        for service in self.services.values():
+            service.serialize(obj=app['services'])
 
         obj[self.id()] = app
         return obj
@@ -292,6 +269,11 @@ class App:
     def deserialize(obj, org, space, appname, readonly=False):
         """
         Convert a dictionary representation of this class into an instance of this class.
+        :param obj: Dict[String, any]; Dictionary to deserialize from in the form {"org_space_app": {App}, ...}.
+        :param org: String; The organization of the app to deserialize.
+        :param space: String; The space of the app to deserialize.
+        :param appname: String; The name of the app to deserialize.
+        :param readonly: bool; Whether we should modify the object by removing the specified app.
         :return: App; An instance of this class.
         """
         self = App(org, space, appname)
@@ -302,26 +284,13 @@ class App:
 
         assert self._validate_japp(app)
 
-        for diego_ip, jdc in app['diego_hosts'].items():
-            assert self._validate_jdc(jdc)
-            dc = DiegoHost(diego_ip)
-            dc.vm = jdc['vm']
-
-            for cont_ip, cont_ports in jdc['containers'].items():
-                dc.add_instance(cont_ip, set(cont_ports))
-
+        for ip in app['diego_hosts']:
+            dc = DiegoHost.deserialize(app['diego_hosts'], ip)
             self.add_diego_cell(dc)
 
-        for service in app['services'].values():
-            assert self._validate_jservice(service)
-            hosts = set([tuple(x) for x in service['hosts']])
-            self.add_service(Service(
-                service['type'],
-                service['name'],
-                service['user'],
-                service['pswd'],
-                hosts
-            ))
+        for sid in app['services']:
+            service = Service.deserialize(app['services'], sid)
+            self.add_service(service)
 
         return self
 
@@ -335,36 +304,6 @@ class App:
             japp['appname'] == self.appname and \
             japp['org'] == self.org and \
             japp['space'] == self.space
-
-    def _validate_jdc(self, jdc):
-        """
-        Quick way to verify a dictionary representation of a diego-host is valid. This is used to validate json
-        information.
-        :param jdc: Dict[String, any]; Dictionary object to validate.
-        :return: bool; Whether it is a valid application representation.
-        """
-        dc = self.diego_hosts.get(jdc['ip'], None)
-        # if we do not know about this diego-cell, we are good
-        # if we have not yet checked the vm, assume it is good
-        # otherwise, make sure they match
-        return \
-            dc is None or \
-            dc.vm is None or \
-            jdc['vm'] == dc.vm
-
-    def _validate_jservice(self, jservice):
-        """
-        Quick way to verify a dictionary represenation of a service is valid. This is used to validate json information.
-        :param jservice: Dict[String, any]; Dictionary object to validate.
-        :return: bool; Whether it is a valid service representation.
-        """
-        service = self.services.get('{}:{}'.format(jservice['type'], jservice['name']))  # TODO: fix code duplication!
-        return \
-            service is None or (
-                service.user == jservice['user'] and
-                service.pswd == jservice['pswd'] and
-                jservice['hosts'] is not None
-            )
 
     def _find_guid(self, cfg):
         """

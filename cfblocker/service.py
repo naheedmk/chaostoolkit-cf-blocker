@@ -123,3 +123,47 @@ class Service:
         :return: String; A unique identifier for this service.
         """
         return '{}:{}'.format(self.type, self.name)
+
+    def serialize(self, obj=None):
+        """
+        Convert this class into a dictionary representation of itself.
+        :param obj: Dict[String, any]; A dictionary to serialize into and merge information with. The keys should be in the form `servicetype:servicename`.
+        :return: Dict[String, any]; A dictionary representation of this object.
+        """
+        if obj is None:
+            obj = {}
+
+        sid = self.id()
+        if sid in obj:
+            jsrv = obj[sid]
+            assert self.user == jsrv['user'] and self.pswd == jsrv['pswd'] and jsrv['hosts']
+            nhosts = set([tuple(x) for x in jsrv['hosts']]) | self.hosts
+            jsrv['hosts'] = list(nhosts)
+        else:
+            obj[sid] = {
+                'type': self.type,
+                'name': self.name,
+                'user': self.user,
+                'pswd': self.pswd,
+                'hosts': list(self.hosts)
+            }
+
+        return obj
+
+    @staticmethod
+    def deserialize(obj, sid):
+        """
+        Convert a dictionary representation of this class into an instance of this class.
+        :param obj: Dict[String, any]; Dictionary to deserialize from in the form {"type:name": {Service}, ...}.
+        :param sid: String; The service `type:name` identifier string.
+        :return: Service; An instance of this class.
+        """
+        service = obj[sid]
+
+        return Service(
+            service['type'],
+            service['name'],
+            service['user'],
+            service['pswd'],
+            set([tuple(x) for x in service['hosts']])
+        )
