@@ -1,5 +1,5 @@
-import json
 import sys
+import json
 
 from cfblocker import DEFAULT_ENCODING
 from cfblocker.diegohost import DiegoHost
@@ -235,27 +235,20 @@ class App:
 
         return 0
 
-    def save(self, filename, overwrite=False):
+    def serialize(self, obj=None):
         """
-        Save all known hosts and services to a json file. This allows for the same hosts that were blocked to be
-        unblocked even if cloud foundry moves application instances to a different container or diego-cell.
-        :param filename: String; The name of the file to save the json object to.
-        :param overwrite: bool; If true, overwrite the entire file instead of appending this object to the file.
+        Convert this class into a dictionary representation of itself.
+        :param obj: A dictionary to serialize into and merge information with.
+        :return: A dictionary representation of this object.
         """
-        if overwrite:
-            j = {}
-        else:
-            try:
-                with open(filename, 'r') as file:
-                    j = json.load(file)
-            except FileNotFoundError:
-                j = {}
+        if obj is None:
+            obj = {}
 
-        if self.id() in j:
-            japp = j[self.id()]
-            assert self._validate_japp(japp)
+        if self.id() in obj:
+            app = obj[self.id()]
+            assert self._validate_japp(app)
         else:
-            japp = {
+            app = {
                 'appname': self.appname,
                 'org': self.org,
                 'space': self.space,
@@ -264,8 +257,8 @@ class App:
             }
 
         for dc in self.diego_hosts.values():
-            if dc.ip in japp['diego_hosts']:
-                jdc = japp['diego_hosts'][dc.ip]
+            if dc.ip in app['diego_hosts']:
+                jdc = app['diego_hosts'][dc.ip]
                 assert jdc['vm'] == dc.vm
                 assert jdc['ip'] == dc.ip
             else:
@@ -275,16 +268,16 @@ class App:
                 jports = set(jdc.get(cont_ip, []))
                 jdc['containers'][cont_ip] = list(jports | cont_ports)
 
-                japp['diego_hosts'][dc.ip] = jdc
+                app['diego_hosts'][dc.ip] = jdc
 
         for sid, service in self.services.items():
-            if sid in japp['services']:
-                jsrv = japp['services'][sid]
+            if sid in app['services']:
+                jsrv = app['services'][sid]
                 assert self._validate_jservice(jsrv)
                 nhosts = set([tuple(x) for x in jsrv['hosts']]) | service.hosts
                 jsrv['hosts'] = list(nhosts)
             else:
-                japp['services'][sid] = {
+                app['services'][sid] = {
                     'type': service.type,
                     'name': service.name,
                     'user': service.user,
@@ -292,29 +285,24 @@ class App:
                     'hosts': list(service.hosts)
                 }
 
-        j[self.id()] = japp
+        obj[self.id()] = app
+        return obj
 
-        with open(filename, 'w') as file:
-            json.dump(j, file, indent=2)
-
-    def load(self, filename, readonly=False):
+    @staticmethod
+    def deserialize(obj, org, space, appname, readonly=False):
         """
-        Load a json file of known hosts and services. This allows for the same hosts that were blocked to be unblocked
-        even if cloud foundry moves application instances to a different container or diego-cell. This will remove the
-        entries for the specific app from the json file if `readonly` is `False`.
-        :param filename: String; The name of the json file to load information from.
-        :param readonly: bool; Whether we should remove the entries this specific app or leave the file as it was.
+        Convert a dictionary representation of this class into an instance of this class.
+        :return: An instance of this class.
         """
-        with open(filename, 'r') as file:
-            j = json.load(file)
+        self = App(org, space, appname)
+        app = obj.get(self.id(), None) if readonly else obj.pop(self.id(), None)
 
-        japp = j.pop(self.id(), None)
-        if japp is None:
+        if app is None:
             return False
 
-        assert self._validate_japp(japp)
+        assert self._validate_japp(app)
 
-        for diego_ip, jdc in japp['diego_hosts'].items():
+        for diego_ip, jdc in app['diego_hosts'].items():
             assert self._validate_jdc(jdc)
             dc = DiegoHost(diego_ip)
             dc.vm = jdc['vm']
@@ -324,16 +312,18 @@ class App:
 
             self.add_diego_cell(dc)
 
-        for jservice in japp['services'].values():
-            assert self._validate_jservice(jservice)
-            hosts = set([tuple(x) for x in jservice['hosts']])
-            service = Service(jservice['type'], jservice['name'], jservice['user'], jservice['pswd'], hosts)
-            self.add_service(service)
+        for service in app['services'].values():
+            assert self._validate_jservice(service)
+            hosts = set([tuple(x) for x in service['hosts']])
+            self.add_service(Service(
+                service['type'],
+                service['name'],
+                service['user'],
+                service['pswd'],
+                hosts
+            ))
 
-        if not readonly:
-            with open(filename, 'w') as file:
-                # dump the json missing the hosts that we are unblocking
-                json.dump(j, file, indent=2, sort_keys=True)
+        return self
 
     def _validate_japp(self, japp):
         """
