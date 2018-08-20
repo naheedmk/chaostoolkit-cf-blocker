@@ -83,7 +83,7 @@ def main():
     group.add_argument('--discover', dest='action', action='store_const', const='discover',
                        help='Discover the application hosts and bound service information.')
 
-    parser.add_argument('--config', type=str, default=DEFAULT_CONFIG,
+    parser.add_argument('--config', metavar='PATH', type=str, default=DEFAULT_CONFIG,
                         help='Specify an alternative config path.')
 
     args = sys.argv
