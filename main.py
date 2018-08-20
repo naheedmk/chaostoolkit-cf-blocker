@@ -2,8 +2,12 @@ import sys
 import yaml
 import json
 
+from argparse import ArgumentParser
 from cfblocker.app import App
 from cfblocker.util import cf_target
+
+# Default path to the configuration file.
+DEFAULT_CONFIG = 'config.yml'
 
 # Record of past hosts and services we have targeted which allows us to undo our actions exactly as we had done them.
 # This prevents lingering rules from existing if CF moves an app between the time it was blocked and unblocked.
@@ -41,7 +45,7 @@ def load_targeted(filename, org, space, name):
     :param org: String; Name of the organization the app is in within cloud foundry.
     :param space: String; Name of the space the app is in within cloud foundry.
     :param name: String; Name of the app within cloud foundry.
-    :return: App; The application with the org, space, and name or None if it was not present.
+    :return: Optional[App]; The application with the org, space, and name or None if it was not present.
     """
     with open(filename, 'r') as file:
         j = json.load(file)
@@ -60,19 +64,39 @@ def main():
     The function which should be called if this is being used as an executable and not being imported as a library.
     It should also give an idea of what functions need to be called an in what order to block or unblock an application.
     """
-    args = sys.argv[1:]
-    if len(args) not in [4, 5]:
-        print("Usage: cf_block_app <block:unblock> <org> <space> <app> [<config_path>]")
-        exit(1)
 
-    config_path = (args[4:5] or ['config.yml'])[0]
-    with open(config_path, 'r') as file:
+    parser = ArgumentParser(description='Block Cloud Foundry Applications or their Services.')
+    parser.add_argument('org', type=str,
+                        help='Cloud Foundry Organization the Application is in.')
+    parser.add_argument('space', type=str,
+                        help='Cloud Foundry Space the Application is in.')
+    parser.add_argument('app', type=str,
+                        help='Name of the application in Cloud Foundry.')
+
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--block', dest='action', action='store_const', const='block',
+                       help='Block access to the application.')
+    group.add_argument('--block-services', dest='action', action='store_const', const='block_services',
+                       help='Block the app from accessing its bound services.')
+    group.add_argument('--unblock', dest='action', action='store_const', const='unblock',
+                       help='Unblock the app and its services.')
+    group.add_argument('--discover', dest='action', action='store_const', const='discover',
+                       help='Discover the application hosts and bound service information.')
+
+    parser.add_argument('--config', type=str, default=DEFAULT_CONFIG,
+                        help='Specify an alternative config path.')
+
+    args = sys.argv
+    if args[0].endswith('.py'):
+        args = args[1:]
+
+    args = parser.parse_args(args)
+
+    with open(args.config, 'r') as file:
         cfg = yaml.load(file)
 
-    assert args[0] in ['block', 'unblock', 'block_services', 'discover']
-    action = args[0]
-
-    org, space, appname = args[1], args[2], args[3]
+    action = args.action
+    org, space, appname = args.org, args.space, args.app
 
     if cf_target(org, space, cfg):
         sys.exit("Failed to target {} and {}. Make sure you are logged in and the names are correct!"
