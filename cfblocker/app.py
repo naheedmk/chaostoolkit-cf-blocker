@@ -184,7 +184,7 @@ class App:
             ret = dc.block(cfg)
 
             if ret:
-                logger.warn("Could not block host {}.".format(dc.vm), file=sys.stderr)
+                logger.warn("Could not block host {}.".format(dc.vm))
                 return ret
 
         return 0
@@ -200,41 +200,82 @@ class App:
             ret = dc.unblock(cfg)
 
             if ret:
-                logger.warn("Could not unblock host {}.".format(dc.vm), file=sys.stderr)
+                logger.warn("Could not unblock host {}.".format(dc.vm))
                 return ret
 
         return 0
 
-    def block_services(self, cfg):
+    def block_services(self, cfg, service_name=None):
         """
         Block this application from accessing its services on all its known hosts.
         :param cfg: Dict[String, any]; Configuration information about the environment.
+        :param service_name: Optional[String]; Specify if a single service should be targeted.
         :return: int; A returncode if any of the bosh ssh instances does not return 0.
         """
 
         for dc in self.diego_hosts.values():
-            ret = dc.block_services(cfg, self.services)
+            services = self.services.values()
+            if service_name:
+                services = filter(lambda s: s.name == service_name, services)
+
+            ret = dc.block_services(cfg, services)
 
             if ret:
-                logger.warn("Could not block all services on host {}".format(dc.vm), file=sys.stderr)
+                if service_name:
+                    logger.warn("Could not block {} on host {}".format(service_name, dc.vm))
+                else:
+                    logger.warn("Could not block all services on host {}".format(dc.vm))
                 return ret
 
         return 0
 
-    def unblock_services(self, cfg):
+    def unblock_services(self, cfg, service_name=None):
         """
         Unblock this application from accessing its services on all its known hosts.
         :param cfg: Dict[String, any]; Configuration information about the environment.
+        :param service_name: Optional[String]; Specify if a single service should be targeted.
         :return: int; A returncode if any of the bosh ssh instances does not return 0.
         """
         for dc in self.diego_hosts.values():
-            ret = dc.unblock_services(cfg, self.services)
+            services = self.services.values()
+            if service_name:
+                services = filter(lambda s: s.name == service_name, services)
+
+            ret = dc.unblock_services(cfg, services)
 
             if ret:
-                logger.warn("Could not unblock all services on host {}.".format(dc.vm), file=sys.stderr)
+                if service_name:
+                    logger.warn("Could not unblock {} on host {}".format(service_name, dc.vm))
+                else:
+                    logger.warn("Could not unblock all services on host {}.".format(dc.vm))
                 return ret
 
         return 0
+
+    def get_services_by_type(self, service_type):
+        """
+        Get all services of a certain type.
+        :param service_type: String; The type of service to filter by.
+        :return: List[String]; A list of services of the specified type.
+        """
+        matching = []
+        for service in self.services.values():
+            if service_type == service.type:
+                matching.append(service)
+        return matching
+
+    def get_service_by_name(self, service_name):
+        """
+        Get the service with the specified name. Will return the first one it finds if there is more than one for some
+        reason.
+        :param service_name: String; The name of the bound service.
+        :return: Optional[Service]; The service or None if there was no match.
+        """
+        for service in self.services.values():
+            if service_name == service.name:
+                return service
+
+        return None
 
     def serialize(self, obj=None, wrap=True):
         """

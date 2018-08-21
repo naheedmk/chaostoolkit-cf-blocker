@@ -23,7 +23,7 @@ diego-cells.
 marketplace.
 
 
-Sample config.yml 
+Sample config.yml or `cfg` values for Chaos Toolkit.
 
 ```yaml
 bosh:

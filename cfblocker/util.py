@@ -1,6 +1,7 @@
 import json
 from subprocess import call, DEVNULL
 from logzero import logger
+from chaoslib.exceptions import FailedActivity
 
 
 def cf_target(org, space, cfg):
@@ -50,3 +51,22 @@ def extract_json(string):
             # ignore it and move on
             pass
     return objs
+
+
+def run_ctk(f, msg=None):
+    """
+    This is a helper function to reduce code duplication when called by Chaos Toolkit.
+    :param f: Fn[] -> App; A function which returns an App instance after performing some actions.
+    :param msg: Optional[String]; A message to display at the beginning of operations.
+    :return: Dict[String, Any]; The serialized App object after all operations were performed.
+    """
+    if msg:
+        logger.info(msg)
+    try:
+        app = f()
+    except SystemExit as e:
+        logger.exception(e)
+        raise FailedActivity(e)
+
+    logger.info("Done!")
+    return app.serialize(wrap=False)

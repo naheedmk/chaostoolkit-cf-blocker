@@ -1,4 +1,3 @@
-import sys
 from subprocess import Popen, DEVNULL, PIPE
 from cfblocker import DEFAULT_ENCODING, TIMES_TO_REMOVE
 from logzero import logger
@@ -160,15 +159,15 @@ class DiegoHost:
         """
         Block instances of the application hosted on this DiegoCell from being able to reach and of the specified
         services.
-        :param cfg: Configuration information about the environment.
-        :param services: List of services to be blocked.
+        :param cfg: Dict[String, any]; Configuration information about the environment.
+        :param services: Iterable[Service]; List of services to be blocked.
         :return: The returncode of the bosh ssh program.
         """
         cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm)
         logger.debug('$ ' + cmd)
         with Popen(cmd, shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
             for cont_ip, _ in self.containers.items():
-                for service in services.values():
+                for service in services:
                     logger.info("Targeting {} on {}".format(service.name, self.vm))
                     service.block(proc.stdin, cont_ip)
 
@@ -183,14 +182,14 @@ class DiegoHost:
         Unblock instances of the application hosted on this DiegoCell from being able to reach and of the specified
         services.
         :param cfg: Dict[String, any]; Configuration information about the environment.
-        :param services: Dict[String, Service]; List of services to be blocked.
+        :param services: Iterable[Service]; List of services to be blocked.
         :return: int; The returncode of the bosh ssh program.
         """
         cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm)
         logger.debug('$ ' + cmd)
         with Popen(cmd, shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
             for cont_ip, _ in self.containers.items():
-                for service in services.values():
+                for service in services:
                     logger.info("Unblocking {} on {}".format(service.name, self.vm))
                     service.unblock(proc.stdin, cont_ip)
 
