@@ -235,10 +235,11 @@ class App:
 
         return 0
 
-    def serialize(self, obj=None):
+    def serialize(self, obj=None, wrap=True):
         """
         Convert this class into a dictionary representation of itself.
         :param obj: Dict[String, any]; A dictionary to serialize into and merge information with. The keys should be in the form `org_space_appname`.
+        :param wrap: bool; Whether we should wrap the result in it's ID. Only alters what we return; still assumes obj is wrappped.
         :return: Dict[String, any]; A dictionary representation of this object.
         """
         if obj is None:
@@ -263,10 +264,10 @@ class App:
             service.serialize(obj=app['services'])
 
         obj[self.id()] = app
-        return obj
+        return obj if wrap else app
 
     @staticmethod
-    def deserialize(obj, org, space, appname, readonly=False):
+    def deserialize(obj, org, space, appname, readonly=False, wrapped=True):
         """
         Convert a dictionary representation of this class into an instance of this class.
         :param obj: Dict[String, any]; Dictionary to deserialize from in the form {"org_space_app": {App}, ...}.
@@ -274,10 +275,14 @@ class App:
         :param space: String; The space of the app to deserialize.
         :param appname: String; The name of the app to deserialize.
         :param readonly: bool; Whether we should modify the object by removing the specified app.
+        :param wrapped: bool; Whether we should assume the obj we receive is wrapped with the obj id.
         :return: Option[App]; An instance of this class or None if it is not in the dictionary.
         """
         self = App(org, space, appname)
-        app = obj.get(self.id(), None) if readonly else obj.pop(self.id(), None)
+        if wrapped:
+            app = obj.get(self.id(), None) if readonly else obj.pop(self.id(), None)
+        else:
+            app = obj
 
         if app is None:
             return None
