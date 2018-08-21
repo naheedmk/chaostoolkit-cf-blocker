@@ -274,13 +274,13 @@ class App:
         :param space: String; The space of the app to deserialize.
         :param appname: String; The name of the app to deserialize.
         :param readonly: bool; Whether we should modify the object by removing the specified app.
-        :return: App; An instance of this class.
+        :return: Option[App]; An instance of this class or None if it is not in the dictionary.
         """
         self = App(org, space, appname)
         app = obj.get(self.id(), None) if readonly else obj.pop(self.id(), None)
 
         if app is None:
-            return False
+            return None
 
         assert self._validate_japp(app)
 

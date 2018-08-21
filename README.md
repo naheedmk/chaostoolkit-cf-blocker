@@ -43,9 +43,9 @@ service-whitelist:
 
 ### Using AppBlocker
 ```commandline
-usage: main.py [-h] (--block | --block-services | --unblock | --discover)
-               [--config PATH]
-               org space app
+usage: cli.py [-h] (--block | --block-services | --unblock | --discover)
+              [--config PATH] [--targeted PATH]
+              org space app
 
 Block Cloud Foundry Applications or their Services.
 
@@ -62,4 +62,6 @@ optional arguments:
   --discover        Discover the application hosts and bound service
                     information.
   --config PATH     Specify an alternative config path.
+  --targeted PATH   Specify an alternative storage location for targeted
+                    applications and services.
 ```

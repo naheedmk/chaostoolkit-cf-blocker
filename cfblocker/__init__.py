@@ -1,3 +1,8 @@
+"""Top-level package for chaostoolkit-cf-appblocker."""
+
+__version__ = '0.1.0'
+
+
 # Default encoding we assume all pipes should use
 DEFAULT_ENCODING = 'UTF-8'
 

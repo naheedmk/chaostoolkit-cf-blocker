@@ -138,14 +138,14 @@ class Service:
             jsrv = obj[sid]
             assert self.user == jsrv['user'] and self.pswd == jsrv['pswd'] and jsrv['hosts']
             nhosts = set([tuple(x) for x in jsrv['hosts']]) | self.hosts
-            jsrv['hosts'] = list(nhosts)
+            jsrv['hosts'] = [list(x) for x in nhosts]
         else:
             obj[sid] = {
                 'type': self.type,
                 'name': self.name,
                 'user': self.user,
                 'pswd': self.pswd,
-                'hosts': list(self.hosts)
+                'hosts': [list(x) for x in self.hosts]
             }
 
         return obj

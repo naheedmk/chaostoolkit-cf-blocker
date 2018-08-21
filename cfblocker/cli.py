@@ -11,10 +11,7 @@ DEFAULT_CONFIG = 'config.yml'
 
 # Record of past hosts and services we have targeted which allows us to undo our actions exactly as we had done them.
 # This prevents lingering rules from existing if CF moves an app between the time it was blocked and unblocked.
-TARGETED_LAST = 'targeted.json'
-
-# Record of what hosts and services were discovered on the last run. This is for reference only.
-DISCOVERY_FILE = 'discovered.json'
+DEFAULT_TARGETED = 'targeted.json'
 
 
 def save_targeted(filename, app):
@@ -59,7 +56,7 @@ def load_targeted(filename, org, space, name):
     return app
 
 
-def main():
+def main(*args):
     """
     The function which should be called if this is being used as an executable and not being imported as a library.
     It should also give an idea of what functions need to be called an in what order to block or unblock an application.
@@ -85,8 +82,9 @@ def main():
 
     parser.add_argument('--config', metavar='PATH', type=str, default=DEFAULT_CONFIG,
                         help='Specify an alternative config path.')
+    parser.add_argument('--targeted', metavar='PATH', type=str, default=DEFAULT_TARGETED,
+                        help='Specify an alternative storage location for targeted applications and services.')
 
-    args = sys.argv
     if args[0].endswith('.py'):
         args = args[1:]
 
@@ -105,24 +103,28 @@ def main():
     if action == 'block':
         app = App(org, space, appname)
         app.find_hosts(cfg)
-        save_targeted(TARGETED_LAST, app)
+        save_targeted(args.targeted, app)
         app.block(cfg)
     elif action == 'unblock':
-        app = load_targeted(TARGETED_LAST, org, space, appname)
+        app = load_targeted(args.targeted, org, space, appname)
+        if app is None:
+            exit(0)
+
         app.unblock(cfg)
         app.unblock_services(cfg)
     elif action == 'block_services':
         app = App(org, space, appname)
         app.find_hosts(cfg)
         app.find_services(cfg)
-        save_targeted(TARGETED_LAST, app)
+        save_targeted(args.targeted, app)
         app.block_services(cfg)
     elif action == 'discover':
         app = App(org, space, appname)
         app.find_hosts(cfg)
         app.find_services(cfg)
-        # TODO: just print this?
-        save_targeted(DISCOVERY_FILE, app)
+
+        print('\n---')  # add a newline
+        yaml.dump(app.serialize(), stream=sys.stdout)
     else:
         sys.exit("UNKNOWN OPTION!")
 
@@ -130,4 +132,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main(*sys.argv)
