@@ -1,5 +1,6 @@
 import json
 from subprocess import call, DEVNULL
+from logzero import logger
 
 
 def cf_target(org, space, cfg):
@@ -12,7 +13,7 @@ def cf_target(org, space, cfg):
     :return: The returncode of the cloud foundry CLI.
     """
     cmd = '{} target -o {} -s {}'.format(cfg['cf']['cmd'], org, space)
-    print('$ ' + cmd)
+    logger.debug('$ ' + cmd)
     return call(cmd.split(' '), stdout=DEVNULL, stderr=DEVNULL)
 
 

@@ -1,6 +1,7 @@
 import re
 import sys
 from socket import gethostbyname as dnslookup
+from logzero import logger
 
 
 class Service:
@@ -50,7 +51,7 @@ class Service:
                 for host in pconfig['hosts']:
                     hosts.add((host, 'tcp', port))
         else:
-            print("Unrecognized service '{}'".format(stype), file=sys.stderr)
+            logger.warn("Unrecognized service '{}'".format(stype))
             return None
 
         return Service(stype, name, user, pswd, hosts)

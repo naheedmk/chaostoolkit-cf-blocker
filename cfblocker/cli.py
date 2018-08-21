@@ -3,6 +3,7 @@ import yaml
 import json
 
 from argparse import ArgumentParser
+from logzero import logger
 from cfblocker.app import App
 from cfblocker.util import cf_target
 
@@ -97,8 +98,9 @@ def main(*args):
     org, space, appname = args.org, args.space, args.app
 
     if cf_target(org, space, cfg):
-        sys.exit("Failed to target {} and {}. Make sure you are logged in and the names are correct!"
-                 .format(org, space))
+        logger.error("Failed to target {} and {}. Make sure you are logged in and the names are correct!"
+                     .format(org, space))
+        exit(1)
 
     if action == 'block':
         app = App(org, space, appname)
@@ -126,10 +128,15 @@ def main(*args):
         print('\n---')  # add a newline
         yaml.dump(app.serialize(), stream=sys.stdout)
     else:
-        sys.exit("UNKNOWN OPTION!")
+        # With argument parsing, this should never happen
+        assert False
 
     print("\n=======\n Done!\n=======")
 
 
 if __name__ == '__main__':
-    main(*sys.argv)
+    try:
+        main(*sys.argv)
+    except SystemExit as e:
+        logger.exception(e)
+        exit(1)

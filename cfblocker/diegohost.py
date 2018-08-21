@@ -1,6 +1,7 @@
 import sys
 from subprocess import Popen, DEVNULL, PIPE
 from cfblocker import DEFAULT_ENCODING, TIMES_TO_REMOVE
+from logzero import logger
 
 
 class DiegoHost:
@@ -98,14 +99,13 @@ class DiegoHost:
         cmd = "{} -e {} -d {} vms | grep -P '\s{}\s' | grep -Po '^diego.cell/[a-z0-9-]*'" \
             .format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.ip.replace('.', '\.'))
 
-        print('$ ' + cmd)
+        logger.debug('$ ' + cmd)
         with Popen(cmd, shell=True, stdout=PIPE, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
             if proc.returncode:
-                print("Failed retrieving VM information from BOSH for {}.".format(self.ip),
-                      file=sys.stderr)
+                logger.warn("Failed retrieving VM information from BOSH for {}.".format(self.ip))
                 return None
             self.vm = proc.stdout.readline().rstrip('\r\n')
-            print(self.vm)
+            logger.debug(self.vm)
 
         return self.vm
 
@@ -117,16 +117,16 @@ class DiegoHost:
         :return: int; The returncode of the bosh ssh program.
         """
         cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm)
-        print('$ ' + cmd)
+        logger.debug('$ ' + cmd)
         with Popen(cmd, shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
             for cont_ip, cont_ports in self.containers.items():
                 for cont_port in cont_ports:
-                    print("Targeting {} on {}:{}".format(self.vm, cont_ip, cont_ports))
-                    cmd = 'sudo iptables -I FORWARD 1 -d {} -p tcp --dport {} -j DROP\n'.format(cont_ip, cont_port)
-                    print('$> ' + cmd, end='')
-                    proc.stdin.write(cmd)
+                    logger.info("Targeting {} on {}:{}".format(self.vm, cont_ip, cont_ports))
+                    cmd = 'sudo iptables -I FORWARD 1 -d {} -p tcp --dport {} -j DROP'.format(cont_ip, cont_port)
+                    logger.debug('$> ' + cmd)
+                    proc.stdin.write(cmd + '\n')
 
-            print('$> exit')
+            logger.debug('$> exit')
             proc.stdin.write('exit\n')
             proc.stdin.close()
 
@@ -141,16 +141,16 @@ class DiegoHost:
         :return: int; The returncode of the bosh ssh program.
         """
         cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm)
-        print('$ ' + cmd)
+        logger.debug('$ ' + cmd)
         with Popen(cmd, shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
             for cont_ip, cont_ports in self.containers.items():
                 for cont_port in cont_ports:
-                    print("Unblocking {} on {}:{}".format(self.vm, cont_ip, cont_ports))
-                    cmd = 'sudo iptables -D FORWARD -d {} -p tcp --dport {} -j DROP\n'.format(cont_ip, cont_port)
-                    print('$> ' + cmd, end='')
+                    logger.info("Unblocking {} on {}:{}".format(self.vm, cont_ip, cont_ports))
+                    cmd = 'sudo iptables -D FORWARD -d {} -p tcp --dport {} -j DROP'.format(cont_ip, cont_port)
+                    logger.debug('$> ' + cmd)
                     for _ in range(TIMES_TO_REMOVE):
-                        proc.stdin.write(cmd)
-            print("$> exit")
+                        proc.stdin.write(cmd + '\n')
+            logger.debug("$> exit")
             proc.stdin.write('exit\n')
             proc.stdin.close()
 
@@ -165,18 +165,18 @@ class DiegoHost:
         :return: The returncode of the bosh ssh program.
         """
         cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm)
-        print('$ ' + cmd)
+        logger.debug('$ ' + cmd)
         with Popen(cmd, shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
             for cont_ip, cont_ports in self.containers.items():
                 for service in services.values():
-                    print("Targeting {} on {}".format(service.name, self.vm))
+                    logger.info("Targeting {} on {}".format(service.name, self.vm))
                     for (s_ip, s_protocol, s_port) in service.hosts:
-                        cmd = 'sudo iptables -I FORWARD 1 -s {} -d {} -p {} --dport {} -j DROP\n'\
+                        cmd = 'sudo iptables -I FORWARD 1 -s {} -d {} -p {} --dport {} -j DROP'\
                             .format(cont_ip, s_ip, s_protocol, s_port)
-                        print('$> ' + cmd, end='')
-                        proc.stdin.write(cmd)
+                        logger.debug('$> ' + cmd)
+                        proc.stdin.write(cmd + '\n')
 
-            print('$> exit')
+            logger.debug('$> exit')
             proc.stdin.write('exit\n')
             proc.stdin.close()
 
@@ -191,19 +191,19 @@ class DiegoHost:
         :return: int; The returncode of the bosh ssh program.
         """
         cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm)
-        print('$ ' + cmd)
+        logger.debug('$ ' + cmd)
         with Popen(cmd, shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
             for cont_ip, cont_ports in self.containers.items():
                 for service in services.values():
-                    print("Unblocking {} on {}".format(service.name, self.vm))
+                    logger.info("Unblocking {} on {}".format(service.name, self.vm))
                     for (s_ip, s_protocol, s_port) in service.hosts:
-                        cmd = 'sudo iptables -D FORWARD -s {} -d {} -p {} --dport {} -j DROP\n'\
+                        cmd = 'sudo iptables -D FORWARD -s {} -d {} -p {} --dport {} -j DROP'\
                             .format(cont_ip, s_ip, s_protocol, s_port)
-                        print('$> ' + cmd, end='')
+                        logger.debug('$> ' + cmd)
                         for _ in range(TIMES_TO_REMOVE):
-                            proc.stdin.write(cmd)
+                            proc.stdin.write(cmd + '\n')
 
-            print('$> exit')
+            logger.debug('$> exit')
             proc.stdin.write('exit\n')
             proc.stdin.close()
 

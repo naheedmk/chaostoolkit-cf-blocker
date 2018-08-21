@@ -6,6 +6,7 @@ from cfblocker.diegohost import DiegoHost
 from cfblocker.service import Service
 from cfblocker.util import extract_json
 from subprocess import Popen, PIPE, DEVNULL
+from logzero import logger
 
 
 class App:
@@ -140,7 +141,7 @@ class App:
         :return: Dict[String, Service]; The list of all services bound to this application.
         """
         cmd = '{} env {}'.format(cfg['cf']['cmd'], self.appname)
-        print('> ' + cmd)
+        logger.debug('> ' + cmd)
         with Popen(cmd.split(' '), stdout=PIPE, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
             if proc.returncode:
                 sys.exit("Failed to query application environment variables.")
@@ -159,7 +160,7 @@ class App:
             sys.exit("Could not find VCAP_SERVICES in output.")
 
         services = json_objs[0]['VCAP_SERVICES']
-        print(json.dumps(services, indent='  '))
+        logger.debug(json.dumps(services, indent='  '))
 
         for service, sconfig in services.items():
             if service in cfg['service-whitelist']:
@@ -168,7 +169,7 @@ class App:
             for instance_cfg in sconfig:
                 s = Service.from_service_info(service, instance_cfg)
                 if s:
-                    print(s)
+                    logger.info("Found service: {}".format(s))
                     self.add_service(s)
 
         return self.services
@@ -183,7 +184,7 @@ class App:
             ret = dc.block(cfg)
 
             if ret:
-                print("WARNING: could not block host {}.".format(dc.vm), file=sys.stderr)
+                logger.warn("Could not block host {}.".format(dc.vm), file=sys.stderr)
                 return ret
 
         return 0
@@ -199,7 +200,7 @@ class App:
             ret = dc.unblock(cfg)
 
             if ret:
-                print("WARNING: could not unblock host {}.".format(dc.vm), file=sys.stderr)
+                logger.warn("Could not unblock host {}.".format(dc.vm), file=sys.stderr)
                 return ret
 
         return 0
@@ -215,7 +216,7 @@ class App:
             ret = dc.block_services(cfg, self.services)
 
             if ret:
-                print("WARNING: could not block all services on host {}".format(dc.vm), file=sys.stderr)
+                logger.warn("Could not block all services on host {}".format(dc.vm), file=sys.stderr)
                 return ret
 
         return 0
@@ -230,7 +231,7 @@ class App:
             ret = dc.unblock_services(cfg, self.services)
 
             if ret:
-                print("WARNING: could not unblock all services on host {}.".format(dc.vm), file=sys.stderr)
+                logger.warn("Could not unblock all services on host {}.".format(dc.vm), file=sys.stderr)
                 return ret
 
         return 0
@@ -318,7 +319,7 @@ class App:
         :return: String; The application GUID.
         """
         cmd = '{} app {} --guid'.format(cfg['cf']['cmd'], self.appname)
-        print('$ ' + cmd)
+        logger.debug('$ ' + cmd)
         with Popen(cmd.split(' '), stdout=PIPE, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
             guid = proc.stdout.readline().rstrip('\r\n')
             if proc.returncode:
@@ -326,7 +327,7 @@ class App:
                     "Failed retrieving the GUID for the specified app. Make sure {} is in this space!".format(self.appname))
 
         self.guid = guid
-        print(guid)
+        logger.debug(guid)
         return guid
 
     def _find_container_hosts(self, cfg):
@@ -337,11 +338,11 @@ class App:
         """
         cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'],
                                              cfg['bosh']['cfdot-dc'])
-        print('$ ' + cmd)
+        logger.debug('$ ' + cmd)
         with Popen(cmd, shell=True, stdin=PIPE, stdout=PIPE, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
-            cmd = 'cfdot actual-lrp-groups | grep --color=never {}\nexit\n'.format(self.guid)
-            print('$> ' + cmd, end='')
-            stdout, _ = proc.communicate(input=cmd, timeout=30)
+            cmd = 'cfdot actual-lrp-groups | grep --color=never {} && exit'.format(self.guid)
+            logger.debug('$> ' + cmd)
+            stdout, _ = proc.communicate(input=cmd + '\n', timeout=30)
             if proc.returncode:
                 sys.exit("Failed retrieving LRP data from {}".format(cfg['bosh']['cfdot-dc']))
 
@@ -366,7 +367,7 @@ class App:
                         continue
 
                     cont_ports.add(cont_port)
-                    print('Found application at {}:{} with container port {}'.format(host_ip, host_port, cont_port))
+                    logger.info('Found application at {}:{} with container port {}'.format(host_ip, host_port, cont_port))
 
                 host = DiegoHost(host_ip)
                 host.add_instance(cont_ip, cont_ports)
