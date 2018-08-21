@@ -167,14 +167,10 @@ class DiegoHost:
         cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm)
         logger.debug('$ ' + cmd)
         with Popen(cmd, shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
-            for cont_ip, cont_ports in self.containers.items():
+            for cont_ip, _ in self.containers.items():
                 for service in services.values():
                     logger.info("Targeting {} on {}".format(service.name, self.vm))
-                    for (s_ip, s_protocol, s_port) in service.hosts:
-                        cmd = 'sudo iptables -I FORWARD 1 -s {} -d {} -p {} --dport {} -j DROP'\
-                            .format(cont_ip, s_ip, s_protocol, s_port)
-                        logger.debug('$> ' + cmd)
-                        proc.stdin.write(cmd + '\n')
+                    service.block(proc.stdin, cont_ip)
 
             logger.debug('$> exit')
             proc.stdin.write('exit\n')
@@ -193,15 +189,10 @@ class DiegoHost:
         cmd = '{} -e {} -d {} ssh {}'.format(cfg['bosh']['cmd'], cfg['bosh']['env'], cfg['bosh']['cf-dep'], self.vm)
         logger.debug('$ ' + cmd)
         with Popen(cmd, shell=True, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, encoding=DEFAULT_ENCODING) as proc:
-            for cont_ip, cont_ports in self.containers.items():
+            for cont_ip, _ in self.containers.items():
                 for service in services.values():
                     logger.info("Unblocking {} on {}".format(service.name, self.vm))
-                    for (s_ip, s_protocol, s_port) in service.hosts:
-                        cmd = 'sudo iptables -D FORWARD -s {} -d {} -p {} --dport {} -j DROP'\
-                            .format(cont_ip, s_ip, s_protocol, s_port)
-                        logger.debug('$> ' + cmd)
-                        for _ in range(TIMES_TO_REMOVE):
-                            proc.stdin.write(cmd + '\n')
+                    service.unblock(proc.stdin, cont_ip)
 
             logger.debug('$> exit')
             proc.stdin.write('exit\n')

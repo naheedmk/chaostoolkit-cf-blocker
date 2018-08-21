@@ -2,6 +2,7 @@ import re
 import sys
 from socket import gethostbyname as dnslookup
 from logzero import logger
+from cfblocker import TIMES_TO_REMOVE
 
 
 class Service:
@@ -124,6 +125,41 @@ class Service:
         :return: String; A unique identifier for this service.
         """
         return '{}:{}'.format(self.type, self.name)
+
+    def block(self, pipe, source_ip=None):
+        """
+        Block this service by writing an iptables rule to the ssh session. If a source IP is specified, then only
+        requests coming from that IP to the service will be blocked.
+        :param pipe: File; The standard input of the ssh process.
+        :param source_ip: Optional[String]; The ip of the application container which may try to access this service.
+        """
+        for (s_ip, s_protocol, s_port) in self.hosts:
+            if source_ip:
+                cmd = 'sudo iptables -I FORWARD 1 -s {} -d {} -p {} --dport {} -j DROP' \
+                    .format(source_ip, s_ip, s_protocol, s_port)
+            else:
+                cmd = 'sudo iptables -I FORWARD 1 -d {} -p {} --dport {} -j DROP' \
+                    .format(s_ip, s_protocol, s_port)
+            logger.debug('$> ' + cmd)
+            pipe.write(cmd + '\n')
+
+    def unblock(self, pipe, source_ip=None):
+        """
+        Unblock this service by removing an iptables rule in the ssh session. It should be called with the same
+        source_ip as `block` was to remove the rule.
+        :param pipe: File; The standard input of the ssh process.
+        :param source_ip: Optional[String]; The ip of the application container which may try to access this service.
+        """
+        for (s_ip, s_protocol, s_port) in self.hosts:
+            if source_ip:
+                cmd = 'sudo iptables -D FORWARD -s {} -d {} -p {} --dport {} -j DROP' \
+                    .format(source_ip, s_ip, s_protocol, s_port)
+            else:
+                cmd = 'sudo iptables -D FORWARD -d {} -p {} --dport {} -j DROP' \
+                    .format(s_ip, s_protocol, s_port)
+            logger.debug('$> ' + cmd)
+            for _ in range(TIMES_TO_REMOVE):
+                pipe.write(cmd + '\n')
 
     def serialize(self, obj=None):
         """
