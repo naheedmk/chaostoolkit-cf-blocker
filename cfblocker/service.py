@@ -1,5 +1,4 @@
 import re
-import sys
 from socket import gethostbyname as dnslookup
 from logzero import logger
 from cfblocker import TIMES_TO_REMOVE
@@ -64,7 +63,7 @@ class Service:
         :param name: String; name of this service instance (this is the name given when creating the service).
         :param user: String; username credential for this service.
         :param pswd: String; password credential for this service.
-        :param hosts: Set[(String, String)]; Set of (IP, Port) tuples for where this service is hosted.
+        :param hosts: Set[(String, String, String)]; Set of (IP, Protocol, Port) tuples for where this service is hosted.
         """
         self.type = type
         self.name = name
@@ -82,7 +81,7 @@ class Service:
     def __contains__(self, item):
         """
         Check if this Service contains a given host.
-        :param item: (String, String); The Host (IP, Port) tuple.
+        :param item: (String, String, String); The Host (IP, Protocol, Port) tuple.
         :return: bool; Whether it is a known host of this service.
         """
         return item in self.hosts
@@ -104,17 +103,18 @@ class Service:
     def __delitem__(self, host):
         """
         Remove a known host from this service.
-        :param host: (String, String); The (IP, Port) of the host to be removed.
+        :param host: (String, String, String); The (IP, Protocol, Port) of the host to be removed.
         """
         return self.hosts.__delitem__(host)
 
-    def add(self, ip, port):
+    def add(self, ip, protocol, port):
         """
         Add a new host for this Service.
         :param ip: String; The host's IP address.
+        :param protocol: String; The host's protocol, e.g. tcp.
         :param port: String; The port the service is listening to.
         """
-        self.hosts.add((ip, port))
+        self.hosts.add((ip, protocol, port))
 
     def __repr__(self):
         return 'Service({}, {}, {}, {}, {})'.format(self.type, self.name, self.user, self.pswd, self.hosts)
