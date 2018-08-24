@@ -28,12 +28,7 @@ classifiers = [
 author = "Matthew Conover"
 author_email = 'matthew.conover1@t-mobile.com'
 url = 'http://chaostoolkit.org'
-packages = [
-    'chaostoolkit_cf_appblocker'
-]
-
-needs_pytest = set(['pytest', 'test']).intersection(sys.argv)
-pytest_runner = ['pytest_runner'] if needs_pytest else []
+packages = ['cfblocker']
 
 install_require = []
 with io.open('requirements.txt') as f:
@@ -51,7 +46,6 @@ setup_params = dict(
     packages=packages,
     include_package_data=True,
     install_requires=install_require,
-    setup_requires=pytest_runner,
     python_requires='>=3.5.*'
 )
 
