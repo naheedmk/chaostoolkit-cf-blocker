@@ -138,5 +138,8 @@ if __name__ == '__main__':
     try:
         main(*sys.argv)
     except SystemExit as e:
-        logger.exception(e)
-        exit(1)
+        if e.code:
+            logger.exception(e)
+            exit(1)
+        else:
+            exit(0)
