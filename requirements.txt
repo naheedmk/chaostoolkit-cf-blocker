@@ -1,3 +1,4 @@
 PyYAML
 chaostoolkit-lib>=0.15.0
 logzero
+chaostoolkit
