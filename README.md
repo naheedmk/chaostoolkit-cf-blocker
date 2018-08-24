@@ -41,7 +41,99 @@ service-whitelist:
  - logger
 ```
 
-### Using AppBlocker
+### AppBlocker Chaos Toolkit Interface
+If you have not installed the `cfblocker` package, then make sure you run Chaos Toolkit from this directory (the root of
+this repository) using `pyhton -m chaostoolkit run exp.json` or else the `cfblocker` module will not be found.  
+
+Currently, the Chaos Toolkit interface does not support saving information about what was targeted, which should be okay
+for the time being as we have yet to observe Cloud Foundry moving app instances as a result of any of these actions.
+Though it is a good reason to be cautious of its use as it simply requeries again when unblocking, so if something did
+move, it will not remove the old rule in the location the app is not longer at. If you need to manually verify that all 
+of the rules have been removed, you can go through each diego-cell in the Cloud Foundry deployment and run
+`iptables -L | grep DROP` to see if any rules are lingering. (This scrip *should* be the only source of `DROP` rules).
+
+The following is a sample, Chaos-Toolkit experiment file to block all traffic to the application.
+
+```json
+{
+  "version": "0.1.0",
+  "title": "Blocking spring-music makes it unreachable.",
+  "description": "This is a testing experiment to verify the script's block traffic function works.",
+  "tags": ["cloudfoundry", "bosh", "springboot"],
+  "configuration": {
+    "TODO": "Some of this needs to be part of the application configuration since the user of this would not know what the cli commands are for instance.",
+    "bosh": {
+      "cmd": "bosh2",
+      "env": "tt-stg02",
+      "cf-dep": "cf-da0ba81cb255ad93a508",
+      "cfdot-dc": "diego_cell/0"
+    },
+    "cf": {
+      "cmd": "cf"
+    },
+    "container-port-whitelist": [22, 2222],
+    "host-port-whitelist": [],
+    "service-whitelist": ["T-Logger"]
+  },
+  "steady-state-hypothesis": {
+    "title": "We can access the application and other neighboring applications (This should fail because we block all traffic)",
+    "probes": [
+      {
+        "type": "probe",
+        "name": "spring-music-responds",
+        "tolerance": 200,
+        "provider": {
+          "type": "http",
+          "url": "http://spring-music-interested-bonobo.apps.tt-stg02.cf.t-mobile.com/"
+        }
+      },
+      {
+        "type": "probe",
+        "name": "spring-music2-responds",
+        "tolerance": 200,
+        "provider": {
+          "type": "http",
+          "url": "http://spring-music2-lean-sable.apps.tt-stg02.cf.t-mobile.com/"
+        }
+      }
+    ]
+  },
+  "method": [
+    {
+      "type": "action",
+      "name": "block-traffic",
+      "provider": {
+        "type": "python",
+        "module": "cfblocker.actions",
+        "func": "block_traffic",
+        "arguments": {
+          "org": "sys-tmo",
+          "space": "test",
+          "appname": "spring-music"
+        }
+      }
+    }
+  ],
+  "rollbacks": [
+    {
+      "type": "action",
+      "name": "unblock-traffic",
+      "provider": {
+        "type": "python",
+        "module": "cfblocker.actions",
+        "func": "unblock_traffic",
+        "arguments": {
+          "org": "sys-tmo",
+          "space": "test",
+          "appname": "spring-music"
+        }
+      }
+    }
+  ]
+}
+``` 
+
+### AppBlocker CLI Interface
 ```commandline
 usage: cli.py [-h] (--block | --block-services | --unblock | --discover)
               [--config PATH] [--targeted PATH]
