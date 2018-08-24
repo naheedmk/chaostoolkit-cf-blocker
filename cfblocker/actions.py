@@ -49,12 +49,13 @@ def unblock_traffic(org: str, space: str, appname: str, configuration: Configura
     return _run(f, "Unblocking all traffic to {}...".format(appname))
 
 
-def block_services(org: str, space: str, appname: str, configuration: Configuration) -> Dict[str, Any]:
+def block_services(org: str, space: str, appname: str, configuration: Configuration, services=None) -> Dict[str, Any]:
     """
     Block the application from reaching all its services.
     :param org: String; Cloud Foundry organization containing the application.
     :param space: String; Cloud Foundry space containing the application.
     :param appname: String; Application in Cloud Foundry which is to be targeted.
+    :param services: List[String]; List of service names to block, will target all if unset.
     :param configuration: Configuration; Configuration details, see `README.md`.
     :return: A JSON Object representing the application which was targeted.
     """
@@ -65,18 +66,21 @@ def block_services(org: str, space: str, appname: str, configuration: Configurat
         if configuration.get('database'):
             # TODO: Implement writing to a DB what we targeted
             assert False
-        app.block_services(configuration)
+        app.block_services(configuration, services=services)
         return app
 
-    return _run(f, "Blocking traffic to all services bound to {}...".format(appname))
+    msg = "Blocking traffic to {} bound to {}...".format(services, appname) if services \
+        else "Blocking traffic to all services bound to {}...".format(appname)
+    return _run(f, msg)
 
 
-def unblock_services(org: str, space: str, appname: str, configuration: Configuration) -> Dict[str, Any]:
+def unblock_services(org: str, space: str, appname: str, configuration: Configuration, services=None) -> Dict[str, Any]:
     """
     Unblock the application from reaching all its services.
     :param org: String; Cloud Foundry organization containing the application.
     :param space: String; Cloud Foundry space containing the application.
     :param appname: String; Application in Cloud Foundry which is to be targeted.
+    :param services: List[String]; List of service names to unblock, will target all if unset.
     :param configuration: Configuration; Configuration details, see `README.md`.
     :return: A JSON Object representing the application which was targeted.
     """
@@ -88,10 +92,12 @@ def unblock_services(org: str, space: str, appname: str, configuration: Configur
         else:
             app.find_hosts(configuration)
             app.find_services(configuration)
-        app.unblock_services(configuration)
+        app.unblock_services(configuration, services=services)
         return app
 
-    return _run(f, "Unblocking traffic to all services bound to {}...".format(appname))
+    msg = "Unblocking traffic to {} bound to {}...".format(services, appname) if services \
+        else "Unblocking traffic to all services bound to {}...".format(appname)
+    return _run(f, msg)
 
 
 def block_service(org: str, space: str, appname: str, service_name: str, configuration: Configuration) -> Dict[str, Any]:
@@ -104,17 +110,8 @@ def block_service(org: str, space: str, appname: str, service_name: str, configu
     :param configuration: Configuration; Configuration details, see `README.md`.
     :return: A JSON Object representing the application which was targeted.
     """
-    def f():
-        app = App(org, space, appname)
-        app.find_hosts(configuration)
-        app.find_services(configuration)
-        if configuration.get('database'):
-            # TODO: Implement writing to a DB what we targeted
-            assert False
-        app.block_services(configuration, service_name)
-        return app
 
-    return _run(f, "Blocking access to {}...".format(service_name))
+    return block_services(org, space, appname, services=[service_name], configuration=configuration)
 
 
 def unblock_service(org: str, space: str, appname: str, service_name: str, configuration: Configuration) -> Dict[str, Any]:
@@ -127,15 +124,5 @@ def unblock_service(org: str, space: str, appname: str, service_name: str, confi
     :param configuration: Configuration; Configuration details, see `README.md`.
     :return: A JSON Object representing the application which was targeted.
     """
-    def f():
-        app = App(org, space, appname)
-        if configuration.get('database'):
-            # TODO: Implement reading from a DB what we targeted
-            assert False
-        else:
-            app.find_hosts(configuration)
-            app.find_services(configuration)
-        app.unblock_services(configuration, service_name)
-        return app
 
-    return _run(f, "Unblocking access to {}...".format(service_name))
+    return unblock_services(org, space, appname, services=[service_name], configuration=configuration)

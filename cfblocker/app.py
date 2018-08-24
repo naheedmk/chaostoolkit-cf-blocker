@@ -205,47 +205,49 @@ class App:
 
         return 0
 
-    def block_services(self, cfg, service_name=None):
+    def block_services(self, cfg, services=None):
         """
         Block this application from accessing its services on all its known hosts.
         :param cfg: Dict[String, any]; Configuration information about the environment.
-        :param service_name: Optional[String]; Specify if a single service should be targeted.
+        :param services: List[String]; List of service names to block, will target all if unset.
         :return: int; A returncode if any of the bosh ssh instances does not return 0.
         """
 
         for dc in self.diego_hosts.values():
-            services = self.services.values()
-            if service_name:
-                services = filter(lambda s: s.name == service_name, services)
+            fserv = self.services.values()
+            if services is not None:
+                # an empty list is not equivalent to None
+                fserv = filter(lambda s: s.name in services, fserv)
 
-            ret = dc.block_services(cfg, services)
+            ret = dc.block_services(cfg, fserv)
 
             if ret:
-                if service_name:
-                    logger.warn("Could not block {} on host {}".format(service_name, dc.vm))
+                if services is not None:
+                    logger.warn("Could not block {} on host {}".format(services, dc.vm))
                 else:
                     logger.warn("Could not block all services on host {}".format(dc.vm))
                 return ret
 
         return 0
 
-    def unblock_services(self, cfg, service_name=None):
+    def unblock_services(self, cfg, services=None):
         """
         Unblock this application from accessing its services on all its known hosts.
         :param cfg: Dict[String, any]; Configuration information about the environment.
-        :param service_name: Optional[String]; Specify if a single service should be targeted.
+        :param services: List[String]; List of service names to unblock, will target all if unset.
         :return: int; A returncode if any of the bosh ssh instances does not return 0.
         """
         for dc in self.diego_hosts.values():
-            services = self.services.values()
-            if service_name:
-                services = filter(lambda s: s.name == service_name, services)
+            fserv = self.services.values()
+            if services is not None:
+                # an empty list is not equivalent to None
+                fserv = filter(lambda s: s.name in services, fserv)
 
-            ret = dc.unblock_services(cfg, services)
+            ret = dc.unblock_services(cfg, fserv)
 
             if ret:
-                if service_name:
-                    logger.warn("Could not unblock {} on host {}".format(service_name, dc.vm))
+                if services is not None:
+                    logger.warn("Could not unblock {} on host {}".format(services, dc.vm))
                 else:
                     logger.warn("Could not unblock all services on host {}.".format(dc.vm))
                 return ret
@@ -365,7 +367,8 @@ class App:
             guid = proc.stdout.readline().rstrip('\r\n')
             if proc.returncode:
                 sys.exit(
-                    "Failed retrieving the GUID for the specified app. Make sure {} is in this space!".format(self.appname))
+                    "Failed retrieving the GUID for the specified app. Make sure {} is in this space!".format(
+                        self.appname))
 
         self.guid = guid
         logger.debug(guid)
@@ -408,7 +411,8 @@ class App:
                         continue
 
                     cont_ports.add(cont_port)
-                    logger.info('Found application at {}:{} with container port {}'.format(host_ip, host_port, cont_port))
+                    logger.info(
+                        'Found application at {}:{} with container port {}'.format(host_ip, host_port, cont_port))
 
                 host = DiegoHost(host_ip)
                 host.add_instance(cont_ip, cont_ports)
