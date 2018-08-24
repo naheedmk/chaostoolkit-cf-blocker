@@ -103,4 +103,5 @@ ENV/
 # pycharm
 .idea
 
-*.json
+journal.json
+targeted.json

@@ -1,0 +1,82 @@
+{
+  "version": "0.1.0",
+  "title": "Blocking spring-music's services makes it unable to reach the database.",
+  "description": "This is a testing experiment to verify the script's block services function works.",
+  "tags": ["cloudfoundry", "bosh", "springboot"],
+  "configuration": {
+    "TODO": "Some of this needs to be part of the application configuration since the user of this would not know what the cli commands are for instance.",
+    "bosh": {
+      "cmd": "bosh2",
+      "env": "tt-stg02",
+      "cf-dep": "cf-da0ba81cb255ad93a508",
+      "cfdot-dc": "diego_cell/0"
+    },
+    "cf": {
+      "cmd": "cf"
+    },
+    "container-port-whitelist": [22, 2222],
+    "host-port-whitelist": [],
+    "service-whitelist": ["T-Logger"]
+  },
+  "steady-state-hypothesis": {
+    "title": "We can access the application and other neighboring applications",
+    "TODO": "Use a web-scraper to see if the albums are loaded...",
+    "probes": [
+      {
+        "type": "probe",
+        "name": "spring-music-responds",
+        "tolerance": 200,
+        "provider": {
+          "type": "http",
+          "url": "http://spring-music-interested-bonobo.apps.tt-stg02.cf.t-mobile.com/"
+        }
+      },
+      {
+        "type": "probe",
+        "name": "spring-music2-responds",
+        "tolerance": 200,
+        "provider": {
+          "type": "http",
+          "url": "http://spring-music2-lean-sable.apps.tt-stg02.cf.t-mobile.com/"
+        }
+      }
+    ]
+  },
+  "method": [
+    {
+      "type": "action",
+      "name": "block-service",
+      "provider": {
+        "type": "python",
+        "module": "cfblocker.actions",
+        "func": "block_service",
+        "pauses": {
+          "after": 60
+        },
+        "arguments": {
+          "org": "sys-tmo",
+          "space": "test",
+          "appname": "spring-music",
+          "service_name": "musicdb"
+        }
+      }
+    }
+  ],
+  "rollbacks": [
+    {
+      "type": "action",
+      "name": "unblock-service",
+      "provider": {
+        "type": "python",
+        "module": "cfblocker.actions",
+        "func": "unblock_service",
+        "arguments": {
+          "org": "sys-tmo",
+          "space": "test",
+          "appname": "spring-music",
+          "service_name": "musicdb"
+        }
+      }
+    }
+  ]
+}
