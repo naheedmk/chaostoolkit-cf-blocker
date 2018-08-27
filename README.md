@@ -1,14 +1,43 @@
 # chaostoolkit-cf-app-blocker
-Plugin for chaostoolkit which blocks access to a cloud foundry application.
+This is a plugin for chaostoolkit which blocks access to a cloud foundry applications and services.
 
-### Getting Started
+## Setup
+
+### Install
+To be used from your experiment, this package must first be installed in the Python enviornment where
+[chaostoolkit](https://chaostoolkit.org/) already exists. This package requires at least
+[Python](https://www.python.org/) version 3.5.
+
+From within the source, run:  
+
+```bash
+sudo python setup.py install
+```
+
+Or to install for just your user:  
+
+```bash
+python setup.py install --user
+```
+
+Now you should be able to import the package.
+
+```python
+import cfblocker
+```
+
+
+### Third-Party CLI Setup
 In order to run the script, it will require that you have the
 [Cloud Foundry CLI](https://docs.cloudfoundry.org/cf-cli/install-go-cli.html) installed and the
 [BOSH CLI](https://bosh.io/docs/cli-v2-install/) installed. You will also need to be logged in to the Cloud Foundry CLI 
 as a user with permission to access all apps which are to be targeted and logged in as an admin to the BOSH CLI. This is
 because the script requires ssh access to the bosh vms.
 
-Once the CLIs are ready, create (or modify the existing) configuration file.
+
+### Configuration File
+Once the CLIs are ready, create (or modify the existing) configuration file. This file is only necessary for CLI use as
+it is included within the experiments for Chaos Toolkit. 
 
 - `bosh`: Information about the bosh cli and environment
     - `cmd`: The bosh-cli command.
@@ -21,7 +50,6 @@ Once the CLIs are ready, create (or modify the existing) configuration file.
 diego-cells.
 - `service-whitelist`: List of service types which should be ignored. These must be the names displayed in the cf-cli
 marketplace.
-
 
 Sample config.yml or `cfg` values for Chaos Toolkit.
 
@@ -40,6 +68,19 @@ host-port-whitelist: []
 service-whitelist:
  - logger
 ```
+
+
+## Usage
+There are two ways you can use this app-blocking script. The first is the CLI which will allow you to manually block a
+services or applications and then unblock them at your leisure. The second is through the `actions` and `probes` which
+should be called by Chaos Toolkit. (Chaos Toolkit should **never** call the CLI interface).
+
+Presently, the CLI and Chaos Toolkit interfaces are not directly compatible due to the added filtering options in the
+Chaos Toolkit version and the anticipated support for this being run as a service. Eventually the Chaos Toolkit
+interface will save to a database what was attacked as the CLI currently saves to a JSON file. Until that time, the
+CLI interface is stateful saving to the targeted file and the Chaos Toolkit interface is stateless re-querying each
+time for hosts and services. As we have yet to observe Cloud Foundry or moving application containers, this *should* not
+be an issue.
 
 ### AppBlocker Chaos Toolkit Interface
 If you have not installed the `cfblocker` package, then make sure you run Chaos Toolkit from this directory (the root of
