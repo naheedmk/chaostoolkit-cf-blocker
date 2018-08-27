@@ -1,0 +1,41 @@
+configuration:
+  TODO: Some of this needs to be part of the application configuration since the user
+    of this would not know what the cli commands are for instance.
+  bosh: {cf-dep: cf-da0ba81cb255ad93a508, cfdot-dc: diego_cell/0, cmd: bosh2, env: tt-stg02}
+  cf: {cmd: cf}
+  container-port-whitelist: [22, 2222]
+  host-port-whitelist: []
+  service-whitelist: [T-Logger]
+description: This is a testing experiment to verify the script's block traffic function
+  works.
+method:
+- name: block-traffic
+  provider:
+    arguments: {appname: spring-music, org: sys-tmo, space: test}
+    func: block_traffic
+    module: cfblocker.actions
+    type: python
+  type: action
+rollbacks:
+- name: unblock-traffic
+  provider:
+    arguments: {appname: spring-music, org: sys-tmo, space: test}
+    func: unblock_traffic
+    module: cfblocker.actions
+    type: python
+  type: action
+steady-state-hypothesis:
+  probes:
+  - name: spring-music-responds
+    provider: {type: http, url: 'http://spring-music-interested-bonobo.apps.tt-stg02.cf.t-mobile.com/'}
+    tolerance: 200
+    type: probe
+  - name: spring-music2-responds
+    provider: {type: http, url: 'http://spring-music2-lean-sable.apps.tt-stg02.cf.t-mobile.com/'}
+    tolerance: 200
+    type: probe
+  title: We can access the application and other neighboring applications (This should
+    fail because we block all traffic)
+tags: [cloudfoundry, bosh, springboot]
+title: Blocking spring-music makes it unreachable.
+version: 0.1.0

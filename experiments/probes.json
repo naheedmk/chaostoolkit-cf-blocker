@@ -44,39 +44,47 @@
   },
   "method": [
     {
-      "type": "action",
-      "name": "block-service",
+      "type": "probe",
+      "name": "find-hosts",
       "provider": {
         "type": "python",
-        "module": "cfblocker.actions",
-        "func": "block_service",
+        "module": "cfblocker.probes",
+        "func": "find_hosts",
         "arguments": {
           "org": "sys-tmo",
           "space": "test",
-          "appname": "spring-music",
-          "service_name": "musicdb"
+          "appname": "spring-music"
+        }
+      }
+    },
+    {
+      "type": "probe",
+      "name": "find-services",
+      "provider": {
+        "type": "python",
+        "module": "cfblocker.probes",
+        "func": "find_services",
+        "arguments": {
+          "org": "sys-tmo",
+          "space": "test",
+          "appname": "spring-music"
+        }
+      }
+    },
+    {
+      "type": "probe",
+      "name": "find-all",
+      "provider": {
+        "type": "python",
+        "module": "cfblocker.probes",
+        "func": "find_all",
+        "arguments": {
+          "org": "sys-tmo",
+          "space": "test",
+          "appname": "spring-music"
         }
       }
     }
   ],
-  "rollbacks": [
-    {
-      "type": "action",
-      "name": "unblock-service",
-      "pauses": {
-        "before": 60
-      },
-      "provider": {
-        "type": "python",
-        "module": "cfblocker.actions",
-        "func": "unblock_service",
-          "arguments": {
-          "org": "sys-tmo",
-          "space": "test",
-          "appname": "spring-music",
-          "service_name": "musicdb"
-        }
-      }
-    }
-  ]
+  "rollbacks": []
 }
