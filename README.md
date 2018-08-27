@@ -1,12 +1,14 @@
 # chaostoolkit-cf-app-blocker
-This is a plugin for chaostoolkit which blocks access to a cloud foundry applications and services.
+This is a plugin for [Chaos Toolkit](https://chaostoolkit.org/) which can block access to 
+[Cloud Foundry](https://www.cloudfoundry.org/) applications their bound services automatically.
 
 ## Setup
 
 ### Install
-To be used from your experiment, this package must first be installed in the Python enviornment where
+To be used from your experiment, this package must first be installed in the Python environment where
 [chaostoolkit](https://chaostoolkit.org/) already exists. This package requires at least
-[Python](https://www.python.org/) version 3.5.
+[Python](https://www.python.org/) version 3.5, so translate `python` as `python3` or `pyhton3.5` as appropriate for your
+operating system.
 
 From within the source, run:  
 
@@ -24,6 +26,7 @@ Now you should be able to import the package.
 
 ```python
 import cfblocker
+print(cfblocker.__version__)
 ```
 
 
@@ -84,7 +87,8 @@ be an issue.
 
 ### AppBlocker Chaos Toolkit Interface
 If you have not installed the `cfblocker` package, then make sure you run Chaos Toolkit from this directory (the root of
-this repository) using `pyhton -m chaostoolkit run exp.json` or else the `cfblocker` module will not be found.  
+this repository) using `pyhton -m chaostoolkit run exp.json` or else the `cfblocker` module will not be found. Otherwise
+just use `chaos run exp.json` from any directory.
 
 Currently, the Chaos Toolkit interface does not support saving information about what was targeted, which should be okay
 for the time being as we have yet to observe Cloud Foundry moving app instances as a result of any of these actions.

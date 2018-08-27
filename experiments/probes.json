@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
-  "title": "Blocking spring-music's services makes it unable to reach the database.",
-  "description": "This is a testing experiment to verify the script's block services function works.",
+  "title": "Probes should gather information about an application",
+  "description": "This is a testing experiment to verify the script's probes work.",
   "tags": ["cloudfoundry", "bosh", "springboot"],
   "configuration": {
     "TODO": "Some of this needs to be part of the application configuration since the user of this would not know what the cli commands are for instance.",

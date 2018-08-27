@@ -6,8 +6,7 @@ configuration:
   container-port-whitelist: [22, 2222]
   host-port-whitelist: []
   service-whitelist: [T-Logger]
-description: This is a testing experiment to verify the script's block services function
-  works.
+description: This is a testing experiment to verify the script's probes work.
 method:
 - name: find-hosts
   provider:
@@ -44,5 +43,5 @@ steady-state-hypothesis:
     type: probe
   title: We can access the application and other neighboring applications
 tags: [cloudfoundry, bosh, springboot]
-title: Blocking spring-music's services makes it unable to reach the database.
+title: Probes should gather information about an application
 version: 0.1.0
