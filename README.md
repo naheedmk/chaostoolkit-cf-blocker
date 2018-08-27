@@ -180,7 +180,7 @@ The following is a sample, Chaos-Toolkit experiment file to block all traffic to
 
 ### AppBlocker CLI Interface
 ```commandline
-usage: cli.py [-h] (--block | --block-services | --unblock | --discover)
+usage: python -m cfblocker.cli [-h] (--block | --block-services | --unblock | --discover)
               [--config PATH] [--targeted PATH]
               org space app
 
