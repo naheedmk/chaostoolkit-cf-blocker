@@ -71,12 +71,15 @@ def main(*args):
     parser.add_argument('app', type=str,
                         help='Name of the application in Cloud Foundry.')
 
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--block', dest='action', action='store_const', const='block',
+    parser.add_argument('-b', '--block', dest='to_block', action='append', type=str,
+                        help='Block access to a service.')
+
+    group = parser.add_mutually_exclusive_group(required=False)
+    group.add_argument('--block-app', dest='action', action='store_const', const='block_app',
                        help='Block access to the application.')
-    group.add_argument('--block-services', dest='action', action='store_const', const='block_services',
-                       help='Block the app from accessing its bound services.')
-    group.add_argument('--unblock', dest='action', action='store_const', const='unblock',
+    group.add_argument('--block-services', dest='action', action='store_const', const='block_all_services',
+                       help='Block the app from accessing any of its bound services.')
+    group.add_argument('--unblock-all', dest='action', action='store_const', const='unblock',
                        help='Unblock the app and its services.')
     group.add_argument('--discover', dest='action', action='store_const', const='discover',
                        help='Discover the application hosts and bound service information.')
@@ -94,7 +97,7 @@ def main(*args):
     with open(args.config, 'r') as file:
         cfg = yaml.load(file)
 
-    action = args.action
+    action = args.action or 'piecewise'
     org, space, appname = args.org, args.space, args.app
 
     if cf_target(org, space, cfg):
@@ -102,7 +105,14 @@ def main(*args):
                      .format(org, space))
         exit(1)
 
-    if action == 'block':
+    if action == 'piecewise':
+        to_block = args.to_block or []
+        app = App(org, space, appname)
+        app.find_hosts(cfg)
+        app.find_services(cfg)
+        save_targeted(args.targeted, app)
+        app.block_services(cfg, services=to_block)
+    elif action == 'block_app':
         app = App(org, space, appname)
         app.find_hosts(cfg)
         save_targeted(args.targeted, app)
@@ -114,7 +124,7 @@ def main(*args):
 
         app.unblock(cfg)
         app.unblock_services(cfg)
-    elif action == 'block_services':
+    elif action == 'block_all_services':
         app = App(org, space, appname)
         app.find_hosts(cfg)
         app.find_services(cfg)
