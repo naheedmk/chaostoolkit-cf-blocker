@@ -31,12 +31,19 @@ class Service:
         if stype == 'p-config-server':
             user = credentials['client_id']
             pswd = credentials['client_secret']
-            match = re.match(r'https://([a-z0-9_.-]+):?(\d+)?', credentials['uri'])
+            match = re.match(r'https://([a-zA-Z0-9_.-]+):?(\d+)?', credentials['uri'])
             ip = dnslookup(match[1])  # from my testing, the diego-cells *should* find the same values
             port = match[2] or '443'
             hosts.add((ip, 'tcp', port))
+        elif stype == 'p-service-registry':
+            user = credentials['client_id']
+            pswd = credentials['client_secret']
+            match = re.match(r'https://([a-zA-Z0-9_.-]+):?(\d+)?', credentials['uri'])
+            ip = dnslookup(match[1])
+            port = match[2] or 'all'
+            hosts.add((ip, 'tcp', 'all'))
         elif stype == 'T-Logger':
-            match = re.match(r'syslog://([a-z0-9_.-]+):(\d+)', credentials['syslog_drain_url'])
+            match = re.match(r'syslog://([a-zA-Z0-9_.-]+):(\d+)', credentials['syslog_drain_url'])
             ip = dnslookup(match[1])
             hosts.add((ip, 'tcp', match[2]))
         elif stype == 'p-mysql':
@@ -134,12 +141,14 @@ class Service:
         :param source_ip: Optional[String]; The ip of the application container which may try to access this service.
         """
         for (s_ip, s_protocol, s_port) in self.hosts:
+            cmd = 'sudo iptables -I FORWARD 1'
             if source_ip:
-                cmd = 'sudo iptables -I FORWARD 1 -s {} -d {} -p {} --dport {} -j DROP' \
-                    .format(source_ip, s_ip, s_protocol, s_port)
-            else:
-                cmd = 'sudo iptables -I FORWARD 1 -d {} -p {} --dport {} -j DROP' \
-                    .format(s_ip, s_protocol, s_port)
+                cmd += ' -s {}'.format(source_ip)
+            cmd += ' -d {} -p {}'.format(s_ip, s_protocol)
+            if s_port != 'all':
+                cmd += ' --dport {}'.format(s_port)
+            cmd += ' -j DROP'
+
             logger.debug('$> ' + cmd)
             pipe.write(cmd + '\n')
 
@@ -151,12 +160,14 @@ class Service:
         :param source_ip: Optional[String]; The ip of the application container which may try to access this service.
         """
         for (s_ip, s_protocol, s_port) in self.hosts:
+            cmd = 'sudo iptables -D FORWARD'
             if source_ip:
-                cmd = 'sudo iptables -D FORWARD -s {} -d {} -p {} --dport {} -j DROP' \
-                    .format(source_ip, s_ip, s_protocol, s_port)
-            else:
-                cmd = 'sudo iptables -D FORWARD -d {} -p {} --dport {} -j DROP' \
-                    .format(s_ip, s_protocol, s_port)
+                cmd += ' -s {}'.format(source_ip)
+            cmd += ' -d {} -p {}'.format(s_ip, s_protocol)
+            if s_port != 'all':
+                cmd += ' --dport {}'.format(s_port)
+            cmd += ' -j DROP'
+
             logger.debug('$> ' + cmd)
             for _ in range(TIMES_TO_REMOVE):
                 pipe.write(cmd + '\n')
